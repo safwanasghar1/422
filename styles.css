@@ -1,0 +1,660 @@
+/* CSS Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --color-primary: #2196F3;
+    --color-success: #4CAF50;
+    --color-error: #F44336;
+    --color-warning: #FFC107;
+    --color-completed: #9E9E9E;
+    --color-text: #212121;
+    --color-text-light: #757575;
+    --color-bg: #FAFAFA;
+    --color-surface: #FFFFFF;
+    --color-border: #E0E0E0;
+    --shadow-sm: 0 2px 4px rgba(0,0,0,0.1);
+    --shadow-md: 0 4px 8px rgba(0,0,0,0.15);
+    --shadow-lg: 0 8px 16px rgba(0,0,0,0.2);
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.6;
+}
+
+.app-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Header */
+.header {
+    text-align: center;
+    padding: 30px 0;
+    background: linear-gradient(135deg, var(--color-primary) 0%, #1976D2 100%);
+    color: white;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-md);
+}
+
+.header h1 {
+    font-size: 2.5em;
+    margin-bottom: 5px;
+}
+
+.subtitle {
+    font-size: 1.1em;
+    opacity: 0.9;
+}
+
+/* User Info Panel */
+.user-info-panel {
+    background: var(--color-surface);
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-sm);
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 20px;
+    align-items: center;
+}
+
+.user-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.user-input-group label {
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.user-input {
+    padding: 10px;
+    border: 2px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 1em;
+    transition: border-color 0.3s;
+}
+
+.user-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.progress-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.progress-bar-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 30px;
+    background-color: var(--color-border);
+    border-radius: 15px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--color-success) 0%, #66BB6A 100%);
+    width: 0%;
+    transition: width 0.5s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 0.9em;
+}
+
+.progress-text {
+    font-weight: 600;
+    min-width: 100px;
+    text-align: right;
+}
+
+.graduation-info {
+    display: flex;
+    gap: 30px;
+    font-size: 0.95em;
+}
+
+.graduation-info p {
+    color: var(--color-text-light);
+}
+
+.graduation-info strong {
+    color: var(--color-text);
+    font-weight: 600;
+}
+
+/* Transfer Credit Banner */
+.transfer-banner {
+    background: var(--color-warning);
+    color: #000;
+    padding: 15px 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-transfer {
+    padding: 8px 16px;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.3s;
+}
+
+.btn-transfer:hover {
+    background: #1976D2;
+}
+
+/* Feedback Message */
+.feedback-message {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 20px;
+    padding-right: 40px;
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    display: none;
+    animation: slideIn 0.3s ease;
+    max-width: 400px;
+}
+
+.feedback-message.show {
+    display: block;
+}
+
+.feedback-text {
+    display: block;
+    padding-right: 10px;
+}
+
+.feedback-close {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.8;
+    transition: opacity 0.3s;
+}
+
+.feedback-close:hover {
+    opacity: 1;
+}
+
+.feedback-message.success {
+    background: var(--color-success);
+    color: white;
+}
+
+.feedback-message.error {
+    background: var(--color-error);
+    color: white;
+}
+
+.feedback-message.warning {
+    background: var(--color-warning);
+    color: #000;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Main Content Grid */
+.main-content {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+}
+
+/* Available Courses Panel */
+.available-courses-panel {
+    background: var(--color-surface);
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: var(--shadow-sm);
+    height: fit-content;
+    position: sticky;
+    top: 20px;
+}
+
+.available-courses-panel h2 {
+    margin-bottom: 15px;
+    font-size: 1.3em;
+    color: var(--color-text);
+}
+
+.search-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.search-input, .filter-select {
+    padding: 10px;
+    border: 2px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 0.95em;
+    transition: border-color 0.3s;
+}
+
+.search-input:focus, .filter-select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.courses-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+/* Course Card */
+.course-card {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    padding: 12px;
+    cursor: grab;
+    transition: all 0.3s;
+    position: relative;
+}
+
+.course-card:hover {
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.course-card:active {
+    cursor: grabbing;
+}
+
+.course-card.dragging {
+    opacity: 0.5;
+}
+
+.course-card.completed {
+    background: var(--color-completed);
+    color: white;
+    border-color: var(--color-completed);
+}
+
+.course-card.completed .course-code {
+    text-decoration: line-through;
+}
+
+.course-card.blocked {
+    opacity: 0.6;
+    border-color: var(--color-error);
+    background: #FFEBEE;
+    pointer-events: auto !important;
+    cursor: grab !important;
+}
+
+.course-code {
+    font-weight: 700;
+    font-size: 1.1em;
+    color: var(--color-primary);
+    margin-bottom: 5px;
+}
+
+.course-card.completed .course-code {
+    color: white;
+}
+
+.course-name {
+    font-size: 0.9em;
+    color: var(--color-text-light);
+    margin-bottom: 5px;
+}
+
+.course-card.completed .course-name {
+    color: rgba(255,255,255,0.9);
+}
+
+.course-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85em;
+    color: var(--color-text-light);
+}
+
+.course-card.completed .course-meta {
+    color: rgba(255,255,255,0.8);
+}
+
+.prerequisite-badge {
+    background: var(--color-warning);
+    color: #000;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.75em;
+    font-weight: 600;
+}
+
+/* Roadmap Section */
+.roadmap-section {
+    background: var(--color-surface);
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: var(--shadow-sm);
+}
+
+.roadmap-section h2 {
+    margin-bottom: 20px;
+    font-size: 1.3em;
+    color: var(--color-text);
+}
+
+.roadmap-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+    /* Ensure all items are visible */
+    grid-auto-flow: row dense; /* Use dense to fill gaps */
+    width: 100%;
+    /* Prevent grid items from collapsing */
+    align-items: start; /* Align items to start (top) instead of stretch */
+    /* Ensure container doesn't collapse */
+    min-height: 400px;
+}
+
+/* Semester Card */
+.semester-card {
+    background: var(--color-bg);
+    border: 3px solid var(--color-border);
+    border-radius: 8px;
+    padding: 15px;
+    min-height: 300px;
+    max-height: 600px; /* Prevent cards from growing too tall */
+    min-width: 250px; /* Ensure minimum width to prevent grid collapse */
+    width: 100%; /* Take full width of grid cell */
+    transition: all 0.3s;
+    /* Ensure visibility */
+    display: flex;
+    flex-direction: column;
+    visibility: visible;
+    opacity: 1;
+    /* Prevent layout issues */
+    overflow: hidden; /* Changed from visible to prevent overflow issues */
+    position: relative;
+    /* Prevent shrinking */
+    flex-shrink: 0;
+    flex-grow: 0;
+    /* Ensure it's always displayed */
+    display: flex !important;
+}
+
+.semester-card.valid-drop {
+    border-color: var(--color-success);
+    background: #E8F5E9;
+}
+
+.semester-card.invalid-drop {
+    border-color: var(--color-error);
+    background: #FFEBEE;
+}
+
+.semester-card.current {
+    border-color: var(--color-primary);
+    background: #E3F2FD;
+}
+
+.semester-card.completed {
+    border-color: var(--color-completed);
+    background: #F5F5F5;
+}
+
+.semester-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--color-border);
+}
+
+.semester-title {
+    font-weight: 700;
+    font-size: 1.1em;
+    color: var(--color-text);
+}
+
+.semester-credits {
+    font-size: 0.9em;
+    color: var(--color-text-light);
+    background: var(--color-surface);
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.semester-courses {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 200px;
+    max-height: 500px; /* Limit height to prevent overflow */
+    overflow-y: auto; /* Add scrolling when content exceeds max-height */
+    overflow-x: hidden;
+    /* Smooth scrolling */
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) var(--color-bg);
+}
+
+/* Webkit scrollbar styling for better browser support */
+.semester-courses::-webkit-scrollbar {
+    width: 8px;
+}
+
+.semester-courses::-webkit-scrollbar-track {
+    background: var(--color-bg);
+    border-radius: 4px;
+}
+
+.semester-courses::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 4px;
+}
+
+.semester-courses::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-light);
+}
+
+.semester-course {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    padding: 10px;
+    cursor: grab;
+    transition: all 0.3s;
+}
+
+.semester-course:hover {
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+.semester-course:active {
+    cursor: grabbing;
+}
+
+.semester-course.dragging {
+    opacity: 0.5;
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    animation: fadeIn 0.3s;
+}
+
+.modal.show {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    background: var(--color-surface);
+    padding: 30px;
+    border-radius: 8px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+}
+
+.close-modal {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    font-size: 2em;
+    font-weight: bold;
+    color: var(--color-text-light);
+    cursor: pointer;
+    transition: color 0.3s;
+}
+
+.close-modal:hover {
+    color: var(--color-text);
+}
+
+.modal-content h2 {
+    margin-bottom: 20px;
+    color: var(--color-text);
+}
+
+.transfer-credits-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.transfer-credit-item {
+    background: var(--color-bg);
+    padding: 15px;
+    border-radius: 6px;
+    border: 2px solid var(--color-border);
+}
+
+.transfer-credit-item.approved {
+    border-color: var(--color-success);
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .main-content {
+        grid-template-columns: 1fr;
+    }
+    
+    .available-courses-panel {
+        position: static;
+    }
+    
+    .roadmap-container {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .user-info-panel {
+        grid-template-columns: 1fr;
+    }
+    
+    .graduation-info {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .roadmap-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Empty State */
+.empty-semester {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--color-text-light);
+    font-style: italic;
+    border: 2px dashed var(--color-border);
+    border-radius: 6px;
+}
+
+.empty-semester.valid-drop {
+    border-color: var(--color-success);
+    background: #E8F5E9;
+}
+
+.empty-semester.invalid-drop {
+    border-color: var(--color-error);
+    background: #FFEBEE;
+}

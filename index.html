@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GradPath - UIC CS Degree Planner</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <h1>GradPath</h1>
+            <p class="subtitle">Your Visual Degree Roadmap</p>
+        </header>
+
+        <!-- User Info Panel -->
+        <section class="user-info-panel">
+            <div class="user-input-group">
+                <label for="userYear">Academic Year:</label>
+                <select id="userYear" class="user-input">
+                    <option value="Freshman">Freshman</option>
+                    <option value="Sophomore">Sophomore</option>
+                    <option value="Junior">Junior</option>
+                    <option value="Senior">Senior</option>
+                </select>
+                <button class="btn-reset" id="resetBtn" title="Reset to default state" style="margin-top: 8px; padding: 6px 12px; background: var(--color-warning); color: #000; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em;">Reset Demo</button>
+            </div>
+            <div class="progress-summary">
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progressBar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <span class="progress-text" id="progressText">0% Complete</span>
+                </div>
+                <div class="graduation-info">
+                    <p>Projected Graduation: <strong id="graduationDate">Spring 2029</strong></p>
+                    <p>Total Credits: <strong id="totalCredits">0</strong> / 128</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Transfer Credit Banner (hidden by default) -->
+        <div class="transfer-banner" id="transferBanner" style="display: none;">
+            <span id="transferBannerText">0 transfer courses unassigned – review suggested mappings</span>
+            <button class="btn-transfer" id="transferBtn">Review Transfer Credits</button>
+        </div>
+
+        <!-- Feedback Message -->
+        <div class="feedback-message" id="feedbackMessage">
+            <span class="feedback-text"></span>
+            <button class="feedback-close" id="feedbackClose">&times;</button>
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Available Courses Panel -->
+            <aside class="available-courses-panel">
+                <h2>Available Courses</h2>
+                <div class="search-filter">
+                    <input type="text" id="courseSearch" placeholder="Search courses..." class="search-input">
+                <select id="categoryFilter" class="filter-select">
+                    <option value="all">All Categories</option>
+                    <option value="core">Core Courses</option>
+                    <option value="elective">Electives</option>
+                    <option value="math">Math</option>
+                    <option value="science">Science</option>
+                    <option value="general">General Education</option>
+                </select>
+                </div>
+                <div class="courses-list" id="availableCourses">
+                    <!-- Courses will be populated by JavaScript -->
+                </div>
+            </aside>
+
+            <!-- Roadmap -->
+            <section class="roadmap-section">
+                <h2>Your Degree Roadmap</h2>
+                <div class="roadmap-container" id="roadmap">
+                    <!-- Semesters will be populated by JavaScript -->
+                </div>
+            </section>
+        </main>
+
+        <!-- Transfer Credit Modal -->
+        <div class="modal" id="transferModal">
+            <div class="modal-content">
+                <span class="close-modal" id="closeTransferModal">&times;</span>
+                <h2>Transfer Credit Mapping</h2>
+                <div class="transfer-credits-list" id="transferCreditsList">
+                    <!-- Transfer credits will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+
