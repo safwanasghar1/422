@@ -654,13 +654,17 @@ const electiveSuggestions = {
 };
 
 // Generate semester list (8 semesters from current)
-function generateSemesters(startYear = 2025, startTerm = "Fall") {
+function generateSemesters(startYear = 2025, startTerm = "Fall", includeSummer = false) {
     const semesters = [];
-    const terms = ["Fall", "Spring"];
+    const terms = includeSummer ? ["Fall", "Spring", "Summer"] : ["Fall", "Spring"];
+    const termOrder = { "Fall": 0, "Spring": 1, "Summer": 2 };
     let currentYear = startYear;
-    let termIndex = startTerm === "Fall" ? 0 : 1;
+    let termIndex = termOrder[startTerm] !== undefined ? termOrder[startTerm] : 0;
     
-    for (let i = 0; i < 8; i++) {
+    // Generate 8 semesters (or more if including Summer to cover similar time span)
+    const totalSemesters = includeSummer ? 12 : 8;
+    
+    for (let i = 0; i < totalSemesters; i++) {
         semesters.push({
             id: `${terms[termIndex]}${currentYear}`,
             term: terms[termIndex],
@@ -670,7 +674,7 @@ function generateSemesters(startYear = 2025, startTerm = "Fall") {
             status: i === 0 ? "current" : "planned"
         });
         
-        termIndex = (termIndex + 1) % 2;
+        termIndex = (termIndex + 1) % terms.length;
         if (termIndex === 0) {
             currentYear++;
         }
