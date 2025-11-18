@@ -25,6 +25,8 @@
                     <option value="Senior">Senior</option>
                 </select>
                 <button class="btn-reset" id="resetBtn" title="Reset to default state" style="margin-top: 8px; padding: 6px 12px; background: var(--color-warning); color: #000; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em;">Reset Demo</button>
+                <button class="btn-import" id="importBtn" title="Import degree audit" style="margin-top: 8px; padding: 6px 12px; background: var(--color-primary); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em;">Import Degree Audit</button>
+                <input type="file" id="auditFileInput" accept=".html,.htm" style="display: none;">
             </div>
             <div class="progress-summary">
                 <div class="progress-bar-container">
@@ -89,6 +91,21 @@
                 <h2>Transfer Credit Mapping</h2>
                 <div class="transfer-credits-list" id="transferCreditsList">
                     <!-- Transfer credits will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Import Audit Modal -->
+        <div class="modal" id="importModal">
+            <div class="modal-content" style="max-width: 800px;">
+                <span class="close-modal" id="closeImportModal">&times;</span>
+                <h2>Import Degree Audit</h2>
+                <div id="importPreview">
+                    <p>Please select your degree audit HTML file to preview the import.</p>
+                </div>
+                <div id="importActions" style="margin-top: 20px; display: none;">
+                    <button class="btn-primary" id="confirmImportBtn" style="padding: 10px 20px; background: var(--color-success); color: #fff; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">Confirm Import</button>
+                    <button class="btn-secondary" id="cancelImportBtn" style="padding: 10px 20px; background: var(--color-secondary); color: #fff; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
                 </div>
             </div>
         </div>
