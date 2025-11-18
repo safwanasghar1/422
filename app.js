@@ -32,28 +32,73 @@ class GradPathApp {
                 if (parsed.semesters && Array.isArray(parsed.semesters)) {
                     console.log('Loaded from localStorage:', {
                         semesterCount: parsed.semesters.length,
-                        semesterIds: parsed.semesters.map(s => s.id)
+                        semesterIds: parsed.semesters.map(s => s.id),
+                        startSemester: parsed.startSemester
                     });
-                    // Ensure we have exactly 8 semesters - regenerate if needed
-                    if (parsed.semesters.length !== 8) {
-                        console.warn('Semester count mismatch! Expected 8, got', parsed.semesters.length);
-                        // Regenerate semesters but preserve course assignments
-                        const originalSemesters = parsed.semesters;
-                        const newSemesters = generateSemesters(2025, "Fall");
-                        // Map courses from old semesters to new ones
-                        newSemesters.forEach(newSem => {
-                            const oldSem = originalSemesters.find(os => os.id === newSem.id);
-                            if (oldSem) {
-                                newSem.courses = oldSem.courses || [];
-                                newSem.credits = oldSem.credits || 0;
-                                newSem.status = oldSem.status || newSem.status;
+                    
+                    // If startSemester is stored, use it to regenerate semesters if needed
+                    if (parsed.startSemester) {
+                        const { term, year, includeSummer } = parsed.startSemester;
+                        const expectedCount = includeSummer ? 12 : 8;
+                        
+                        if (parsed.semesters.length !== expectedCount) {
+                            const originalSemesters = parsed.semesters;
+                            const newSemesters = generateSemesters(year, term, includeSummer || false);
+                            
+                            // Map courses from old semesters to new ones
+                            newSemesters.forEach(newSem => {
+                                const oldSem = originalSemesters.find(os => os.id === newSem.id);
+                                if (oldSem) {
+                                    newSem.courses = oldSem.courses || [];
+                                    newSem.credits = oldSem.credits || 0;
+                                    newSem.status = oldSem.status || newSem.status;
+                                }
+                            });
+                            parsed.semesters = newSemesters;
+                            console.log('Regenerated semesters from startSemester:', {
+                                semesterCount: parsed.semesters.length,
+                                semesterIds: parsed.semesters.map(s => s.id),
+                                includeSummer: includeSummer
+                            });
+                        }
+                    } else if (parsed.semesters.length !== 8 && parsed.semesters.length !== 12) {
+                        // Fallback: detect earliest semester from existing courses
+                        const earliestSem = this.detectEarliestSemesterFromCourses(parsed.semesters);
+                        const hasSummer = parsed.semesters.some(s => s.id.startsWith('Summer'));
+                        
+                        if (earliestSem) {
+                            const match = earliestSem.match(/(\w+)(\d{4})/);
+                            if (match) {
+                                const term = match[1];
+                                const year = parseInt(match[2]);
+                                const originalSemesters = parsed.semesters;
+                                const newSemesters = generateSemesters(year, term, hasSummer);
+                                
+                                newSemesters.forEach(newSem => {
+                                    const oldSem = originalSemesters.find(os => os.id === newSem.id);
+                                    if (oldSem) {
+                                        newSem.courses = oldSem.courses || [];
+                                        newSem.credits = oldSem.credits || 0;
+                                        newSem.status = oldSem.status || newSem.status;
+                                    }
+                                });
+                                parsed.semesters = newSemesters;
+                                parsed.startSemester = { term, year, includeSummer: hasSummer };
                             }
-                        });
-                        parsed.semesters = newSemesters;
-                        console.log('Regenerated semesters:', {
-                            semesterCount: parsed.semesters.length,
-                            semesterIds: parsed.semesters.map(s => s.id)
-                        });
+                        } else {
+                            // Default fallback
+                            const originalSemesters = parsed.semesters;
+                            const newSemesters = generateSemesters(2025, "Fall", false);
+                            newSemesters.forEach(newSem => {
+                                const oldSem = originalSemesters.find(os => os.id === newSem.id);
+                                if (oldSem) {
+                                    newSem.courses = oldSem.courses || [];
+                                    newSem.credits = oldSem.credits || 0;
+                                    newSem.status = oldSem.status || newSem.status;
+                                }
+                            });
+                            parsed.semesters = newSemesters;
+                        }
                     }
                     return parsed;
                 }
@@ -86,6 +131,7 @@ class GradPathApp {
             major: "Computer Science",
             currentSemester: "Spring2026",
             semesters: semesters,
+            startSemester: { term: "Fall", year: 2025, includeSummer: false },
             transferCredits: [
                 // Uncomment for transfer student scenario:
                 // {
@@ -100,6 +146,34 @@ class GradPathApp {
             totalCredits: 0,
             projectedGraduation: "Spring2029"
         };
+    }
+
+    detectEarliestSemesterFromCourses(semesters) {
+        let earliest = null;
+        let earliestYear = Infinity;
+        let earliestTermOrder = Infinity;
+        
+        // Academic year order: Fall comes first, then Winter, Spring, Summer
+        const termOrder = { 'Fall': 0, 'Winter': 1, 'Spring': 2, 'Summer': 3 };
+        
+        semesters.forEach(sem => {
+            if (sem.courses.length > 0) {
+                const match = sem.id.match(/(\w+)(\d{4})/);
+                if (match) {
+                    const term = match[1];
+                    const year = parseInt(match[2]);
+                    const termOrd = termOrder[term] !== undefined ? termOrder[term] : 999;
+                    
+                    if (year < earliestYear || (year === earliestYear && termOrd < earliestTermOrder)) {
+                        earliestYear = year;
+                        earliestTermOrder = termOrd;
+                        earliest = sem.id;
+                    }
+                }
+            }
+        });
+        
+        return earliest;
     }
 
     // Save user progress to localStorage
@@ -153,6 +227,37 @@ class GradPathApp {
         // Feedback message close button
         document.getElementById('feedbackClose')?.addEventListener('click', () => {
             this.closeFeedback();
+        });
+
+        // Import audit functionality
+        document.getElementById('importBtn')?.addEventListener('click', () => {
+            document.getElementById('auditFileInput').click();
+        });
+
+        document.getElementById('auditFileInput')?.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                this.handleAuditFileUpload(file);
+            }
+        });
+
+        document.getElementById('closeImportModal')?.addEventListener('click', () => {
+            this.closeImportModal();
+        });
+
+        document.getElementById('cancelImportBtn')?.addEventListener('click', () => {
+            this.closeImportModal();
+        });
+
+        document.getElementById('confirmImportBtn')?.addEventListener('click', () => {
+            this.confirmImport();
+        });
+
+        // Close import modal on outside click
+        document.getElementById('importModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'importModal') {
+                this.closeImportModal();
+            }
         });
     }
 
@@ -505,12 +610,21 @@ class GradPathApp {
     }
 
     // Get math elective courses (excluding required statistics courses)
+    // Includes predefined electives plus any math electives taken from audit
     getMathElectives() {
-        return [
+        const predefinedElectives = [
             "MATH215", "MATH218", "MATH220", "MATH320", "MATH430", 
             "MATH435", "MATH436", "MCS421", "MCS423", "MCS471", 
             "STAT401", "STAT473"
         ];
+        
+        // Add math electives taken from audit (like MATH310, etc.)
+        const auditElectives = this.userProgress?.mathElectivesFromAudit || [];
+        
+        // Combine and remove duplicates
+        const allElectives = [...new Set([...predefinedElectives, ...auditElectives])];
+        
+        return allElectives;
     }
 
     // Get required statistics courses (must take one)
@@ -528,10 +642,19 @@ class GradPathApp {
     }
 
     // Get CS elective courses (tech electives)
+    // Includes predefined electives plus any technical electives taken from audit
     getCSElectives() {
-        return [
+        const predefinedElectives = [
             "CS407", "CS411", "CS418", "CS422", "CS440", "CS351"
         ];
+        
+        // Add technical electives taken from audit
+        const takenElectives = this.userProgress.technicalElectivesTaken || [];
+        
+        // Combine and remove duplicates
+        const allElectives = [...new Set([...predefinedElectives, ...takenElectives])];
+        
+        return allElectives;
     }
 
     // Get count of CS elective courses already scheduled
@@ -745,6 +868,55 @@ class GradPathApp {
             // Hide CS electives if 6 courses are already selected
             if (currentCourseCount >= 6) {
                 console.log(`Hiding ${course.code} because 6 CS elective courses are already selected`);
+                return true;
+            }
+        }
+        
+        // Check if this is a gen ed placeholder that has been fulfilled
+        const genEdPlaceholders = ['GEN101', 'GEN102', 'GEN103', 'GEN104', 'GEN105', 'GEN106', 'GEN107'];
+        if (genEdPlaceholders.includes(courseId)) {
+            const genEdMappings = this.userProgress.genEdMappings || {};
+            // Hide placeholder if it has been mapped to an actual course
+            if (genEdMappings[courseId]) {
+                console.log(`Hiding ${course.code} because gen ed requirement has been fulfilled with ${genEdMappings[courseId]}`);
+                return true;
+            }
+        }
+        
+        // Check if this is a free elective placeholder
+        const freeElectivePlaceholders = ['FREE001', 'FREE002', 'FREE003'];
+        if (freeElectivePlaceholders.includes(courseId)) {
+            const graduationRequirement = 128;
+            const totalCredits = this.userProgress.totalCredits || 0;
+            const remainingCredits = graduationRequirement - totalCredits;
+            
+            // If graduation requirement is already met, hide all free elective placeholders
+            if (remainingCredits <= 0) {
+                console.log(`Hiding ${course.code} because graduation requirement (128 credits) is already met`);
+                return true;
+            }
+            
+            // Calculate how many free elective credits are needed (max 9 credits = 3 courses)
+            const freeElectiveCreditsNeeded = Math.min(remainingCredits, 9);
+            const freeElectiveCoursesNeeded = Math.ceil(freeElectiveCreditsNeeded / 3); // Each placeholder is 3 credits
+            
+            // Count how many free elective placeholders are currently scheduled
+            const scheduledCourses = this.getAllScheduledCourses();
+            const scheduledFreeElectives = freeElectivePlaceholders.filter(id => scheduledCourses.includes(id));
+            const scheduledFreeElectiveCount = scheduledFreeElectives.length;
+            
+            // Get the index of this placeholder (0, 1, or 2)
+            const placeholderIndex = freeElectivePlaceholders.indexOf(courseId);
+            
+            // Hide if we already have enough free electives scheduled
+            if (scheduledFreeElectiveCount >= freeElectiveCoursesNeeded) {
+                console.log(`Hiding ${course.code} because ${scheduledFreeElectiveCount} free elective(s) are already scheduled (need ${freeElectiveCoursesNeeded})`);
+                return true;
+            }
+            
+            // Hide if this specific placeholder index is beyond what's needed
+            if (placeholderIndex >= freeElectiveCoursesNeeded) {
+                console.log(`Hiding ${course.code} because only ${freeElectiveCoursesNeeded} free elective(s) are needed (this is placeholder ${placeholderIndex + 1})`);
                 return true;
             }
         }
@@ -987,10 +1159,14 @@ class GradPathApp {
             const isAlreadyScheduled = scheduledCourses.includes(courseId);
             const currentCourseCount = this.getMathElectiveCourseCount(isAlreadyScheduled ? courseId : null);
             
+            // If adding a new course (not moving), check if adding it would exceed the limit
+            const wouldExceedLimit = !isAlreadyScheduled && currentCourseCount >= 3;
+            
             console.log(`Math elective validation for ${course.code}:`, {
                 courseId,
                 isAlreadyScheduled,
                 currentCourseCount,
+                wouldExceedLimit,
                 maxCourses: 3,
                 isRequiredStat: requiredStats.includes(courseId),
                 isMathElective: mathElectives.includes(courseId)
@@ -998,13 +1174,19 @@ class GradPathApp {
             
             // Check if adding this course would exceed 3 math elective courses total
             // Allow up to 3 courses total (including required statistics)
-            // Block only if it would exceed 3 courses (currentCourseCount >= 3)
-            if (currentCourseCount >= 3) {
-                return {
-                    valid: false,
-                    reason: `You have already selected 3 math elective courses (including required statistics). Maximum allowed: 3 courses total.`
-                };
+            // If the course is already scheduled, we're moving it, so allow it (count excludes it, so it's fine)
+            // If the course is NOT already scheduled, we're adding a new one, so check the limit strictly
+            if (!isAlreadyScheduled) {
+                // Adding a new course - check if we already have 3
+                if (currentCourseCount >= 3) {
+                    console.error(`BLOCKING: Trying to add 4th math elective. Current count: ${currentCourseCount}, trying to add: ${course.code}`);
+                    return {
+                        valid: false,
+                        reason: `Cannot add more than 3 math elective courses (including required statistics). You currently have ${currentCourseCount} courses selected.`
+                    };
+                }
             }
+            // If isAlreadyScheduled is true, we're moving an existing course, so allow it
         }
 
         // Check if trying to take both required statistics courses
@@ -1269,23 +1451,118 @@ class GradPathApp {
 
     // Update projected graduation date
     updateGraduationDate() {
-        const remainingCredits = 128 - this.userProgress.totalCredits;
-        let creditsPerSemester = 15; // Average
+        const graduationRequirement = 128;
+        const totalCredits = this.userProgress.totalCredits || 0;
+        const remainingCredits = graduationRequirement - totalCredits;
+        
+        // If graduation requirement is already met, show the last semester with courses
+        if (remainingCredits <= 0) {
+            const semestersWithCourses = this.userProgress.semesters.filter(s => s.courses.length > 0);
+            if (semestersWithCourses.length > 0) {
+                const lastSemester = semestersWithCourses[semestersWithCourses.length - 1];
+                this.userProgress.projectedGraduation = `${lastSemester.term} ${lastSemester.year}`;
+                document.getElementById('graduationDate').textContent = this.userProgress.projectedGraduation;
+            } else {
+                this.userProgress.projectedGraduation = "Complete";
+                document.getElementById('graduationDate').textContent = "Complete";
+            }
+            return;
+        }
+        
+        // Calculate average credits per semester from planned semesters
+        let creditsPerSemester = 15; // Default average
+        const plannedSemesters = this.userProgress.semesters.filter(s => 
+            s.status === "current" || s.status === "planned" || s.status === "in-progress"
+        );
+        
+        if (plannedSemesters.length > 0) {
+            const totalPlannedCredits = plannedSemesters.reduce((sum, sem) => sum + (sem.credits || 0), 0);
+            if (totalPlannedCredits > 0) {
+                creditsPerSemester = totalPlannedCredits / plannedSemesters.length;
+            }
+        }
+        
+        // Calculate semesters needed
         let semestersNeeded = Math.ceil(remainingCredits / creditsPerSemester);
 
-        const currentSemester = this.userProgress.semesters.find(s => s.status === 'current');
+        // Find current semester
+        const currentSemester = this.userProgress.semesters.find(s => 
+            s.status === 'current' || s.status === 'in-progress'
+        );
+        
         if (!currentSemester) {
+            // If no current semester, try to find the first planned semester
+            const firstPlanned = this.userProgress.semesters.find(s => s.status === 'planned');
+            if (!firstPlanned) {
+                this.userProgress.projectedGraduation = "Unknown";
+                document.getElementById('graduationDate').textContent = "Unknown";
+                return;
+            }
+            // Use first planned semester as starting point
+            const firstIndex = this.userProgress.semesters.findIndex(s => s.id === firstPlanned.id);
+            let graduationIndex = firstIndex + semestersNeeded - 1;
+            
+            if (graduationIndex < this.userProgress.semesters.length) {
+                const gradSemester = this.userProgress.semesters[graduationIndex];
+                this.userProgress.projectedGraduation = `${gradSemester.term} ${gradSemester.year}`;
+                document.getElementById('graduationDate').textContent = this.userProgress.projectedGraduation;
+            } else {
+                // Calculate beyond existing semesters
+                this.calculateGraduationBeyondSemesters(firstPlanned, semestersNeeded - (this.userProgress.semesters.length - firstIndex));
+            }
             return;
         }
 
         let currentIndex = this.userProgress.semesters.findIndex(s => s.id === currentSemester.id);
-        let graduationIndex = currentIndex + semestersNeeded;
+        
+        // Check if we can find graduation within existing semesters by accumulating credits
+        let creditsAccumulated = 0;
+        let graduationIndex = -1;
+        
+        for (let i = currentIndex; i < this.userProgress.semesters.length; i++) {
+            const sem = this.userProgress.semesters[i];
+            creditsAccumulated += sem.credits || 0;
+            if (totalCredits + creditsAccumulated >= graduationRequirement) {
+                graduationIndex = i;
+                break;
+            }
+        }
 
-        if (graduationIndex < this.userProgress.semesters.length) {
+        if (graduationIndex !== -1) {
+            // Found graduation within existing semesters
             const gradSemester = this.userProgress.semesters[graduationIndex];
             this.userProgress.projectedGraduation = `${gradSemester.term} ${gradSemester.year}`;
             document.getElementById('graduationDate').textContent = this.userProgress.projectedGraduation;
+        } else {
+            // Need to calculate beyond current semesters
+            const creditsInExisting = this.userProgress.semesters
+                .slice(currentIndex)
+                .reduce((sum, sem) => sum + (sem.credits || 0), 0);
+            const creditsStillNeeded = remainingCredits - creditsInExisting;
+            const additionalSemestersNeeded = Math.ceil(creditsStillNeeded / creditsPerSemester);
+            this.calculateGraduationBeyondSemesters(currentSemester, additionalSemestersNeeded);
         }
+    }
+    
+    // Helper function to calculate graduation date beyond existing semesters
+    calculateGraduationBeyondSemesters(startSemester, additionalSemestersNeeded) {
+        const hasSummer = this.userProgress.semesters.some(s => s.id.startsWith('Summer'));
+        const actualTerms = hasSummer ? ["Fall", "Spring", "Summer"] : ["Fall", "Spring"];
+        
+        let currentYear = startSemester.year;
+        let currentTermIndex = actualTerms.indexOf(startSemester.term);
+        if (currentTermIndex === -1) currentTermIndex = 0;
+        
+        for (let i = 0; i < additionalSemestersNeeded; i++) {
+            currentTermIndex = (currentTermIndex + 1) % actualTerms.length;
+            if (currentTermIndex === 0) {
+                currentYear++;
+            }
+        }
+        
+        const gradTerm = actualTerms[currentTermIndex];
+        this.userProgress.projectedGraduation = `${gradTerm} ${currentYear}`;
+        document.getElementById('graduationDate').textContent = this.userProgress.projectedGraduation;
     }
 
     // Show progress message
@@ -1416,6 +1693,1175 @@ class GradPathApp {
             this.updateProgress();
             this.renderRoadmap();
             this.checkTransferCredits();
+        }
+    }
+
+    // Import degree audit functions
+    handleAuditFileUpload(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const htmlContent = e.target.result;
+            this.parseAuditHTML(htmlContent);
+        };
+        reader.onerror = () => {
+            this.showFeedback('error', 'Error reading file. Please try again.');
+        };
+        reader.readAsText(file);
+    }
+
+    parseAuditHTML(htmlContent) {
+        try {
+            // Parse HTML using DOMParser
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlContent, 'text/html');
+
+            // Map gen ed requirement names to categories
+            // Note: HTML uses encoded ampersands (&amp;) which get parsed as & by DOMParser
+            const genEdCategoryMap = {
+                'THEPAST': 'Understanding the Past',
+                'WORLDCULT': 'Exploring World Cultures',
+                'INDV&SOC': 'Understanding the Individual and Society', // DOMParser converts &amp; to &
+                'USSOCIETY': 'Understanding U.S. Society',
+                'CRTVARTS': 'Understanding the Creative Arts',
+                'HM/SS/ART': 'Additional General Education Electives' // 6 hours in humanities/social sciences/arts
+            };
+
+            // Map math elective requirement name
+            const mathElectiveReqName = 'CS MATH'; // "Math Electives - CS Major"
+
+            // First, identify gen ed courses and their categories
+            const genEdCoursesByCategory = {};
+            Object.keys(genEdCategoryMap).forEach(reqName => {
+                // Try both the direct name and HTML-encoded version
+                let requirement = doc.querySelector(`.requirement[rname="${reqName}"]`);
+                if (!requirement && reqName.includes('&')) {
+                    // Try HTML-encoded version
+                    const encodedName = reqName.replace(/&/g, '&amp;');
+                    requirement = doc.querySelector(`.requirement[rname="${encodedName}"]`);
+                }
+                if (requirement) {
+                    const courseTables = requirement.querySelectorAll('table.completedCourses');
+                    courseTables.forEach(table => {
+                        const courseRows = table.querySelectorAll('tr.takenCourse');
+                        courseRows.forEach(row => {
+                            const termCell = row.querySelector('.term');
+                            const courseCell = row.querySelector('.course');
+                            const gradeCell = row.querySelector('.grade');
+                            const creditCell = row.querySelector('.credit');
+                            const descCell = row.querySelector('.description');
+                            
+                            if (courseCell && termCell) {
+                                const courseCode = courseCell.textContent.trim();
+                                const grade = gradeCell ? gradeCell.textContent.trim() : '';
+                                const termCode = termCell.textContent.trim();
+                                
+                                // Skip withdrawn courses
+                                if (grade.toUpperCase() === 'W' || grade.toUpperCase().startsWith('W')) {
+                                    return;
+                                }
+                                
+                                // Get course name from description
+                                let courseName = null;
+                                if (descCell) {
+                                    const descLines = descCell.querySelectorAll('.descLine');
+                                    if (descLines.length > 0) {
+                                        courseName = Array.from(descLines).pop().textContent.trim();
+                                    }
+                                }
+                                
+                                const normalizedCode = courseCode.replace(/\s+/g, '');
+                                const semesterId = this.convertTermCodeToSemesterId(termCode);
+                                
+                                if (!genEdCoursesByCategory[genEdCategoryMap[reqName]]) {
+                                    genEdCoursesByCategory[genEdCategoryMap[reqName]] = [];
+                                }
+                                
+                                // Store course with semester info
+                                const courseData = {
+                                    courseId: normalizedCode,
+                                    semesterId: semesterId,
+                                    originalCode: courseCode,
+                                    name: courseName,
+                                    credits: creditCell ? parseFloat(creditCell.textContent.trim()) : 3
+                                };
+                                const category = genEdCategoryMap[reqName];
+                                genEdCoursesByCategory[category].push(courseData);
+                                console.log(`Found gen ed course: ${normalizedCode} (${category}) in ${semesterId}`);
+                            }
+                        });
+                    });
+                }
+            });
+
+            // Store gen ed mapping for later use
+            this.genEdCoursesByCategory = genEdCoursesByCategory;
+            console.log('Gen Ed courses by category:', genEdCoursesByCategory);
+
+            // Parse math electives from the audit
+            const mathElectiveCourses = new Set();
+            const mathElectiveRequirement = doc.querySelector(`.requirement[rname="${mathElectiveReqName}"]`);
+            if (mathElectiveRequirement) {
+                const courseTables = mathElectiveRequirement.querySelectorAll('table.completedCourses');
+                courseTables.forEach(table => {
+                    const courseRows = table.querySelectorAll('tr.takenCourse');
+                    courseRows.forEach(row => {
+                        const courseCell = row.querySelector('.course');
+                        const gradeCell = row.querySelector('.grade');
+                        if (courseCell) {
+                            const courseCode = courseCell.textContent.trim();
+                            const grade = gradeCell ? gradeCell.textContent.trim() : '';
+                            
+                            // Skip withdrawn courses
+                            if (grade.toUpperCase() === 'W' || grade.toUpperCase().startsWith('W')) {
+                                return;
+                            }
+                            
+                            const normalizedCode = courseCode.replace(/\s+/g, '');
+                            mathElectiveCourses.add(normalizedCode);
+                            console.log(`Found math elective from audit: ${normalizedCode}`);
+                        }
+                    });
+                });
+            }
+            
+            // Store math electives found in audit for later use
+            this.mathElectivesFromAudit = Array.from(mathElectiveCourses);
+            console.log('Math electives found in audit:', this.mathElectivesFromAudit);
+
+            // First, identify courses that don't apply toward the degree
+            const excludedCourses = new Set();
+            
+            // Find requirement sections that contain courses that don't apply
+            // Check both .reqHeader and .reqTitle elements
+            const reqHeaders = doc.querySelectorAll('.reqHeader, .reqTitle');
+            reqHeaders.forEach(header => {
+                const headerText = header.textContent.trim();
+                // Check for various patterns that indicate courses don't apply
+                if (headerText.includes('do not apply toward a degree') || 
+                    headerText.includes('do not apply to the degree') ||
+                    headerText.includes('The following courses do not apply toward a degree in the College of Engineering') ||
+                    headerText.includes('UIC courses with W grades and do not apply to the degree') ||
+                    headerText.includes('Transfer courses not awarded credit toward this degree') ||
+                    headerText.includes('Transfer courses not awarded credit toward the degree') ||
+                    headerText.includes('as determined by the College of Engineering') ||
+                    headerText.includes('not applicable toward this degree') ||
+                    headerText.includes('not applicable toward a degree') ||
+                    headerText.includes('do not apply toward') ||
+                    headerText.includes('not awarded credit toward') ||
+                    headerText.includes('not count toward') ||
+                    headerText.includes('not count towards')) {
+                    // Find the parent requirement element
+                    const requirement = header.closest('.requirement');
+                    if (requirement) {
+                        console.log(`Found exclusion requirement section: "${headerText.substring(0, 100)}"`);
+                        // Find all course tables in this requirement and all subrequirements
+                        const excludedTables = requirement.querySelectorAll('table.completedCourses');
+                        excludedTables.forEach(table => {
+                            const courseRows = table.querySelectorAll('tr.takenCourse');
+                            courseRows.forEach(row => {
+                                const courseCell = row.querySelector('.course');
+                                const gradeCell = row.querySelector('.grade');
+                                if (courseCell) {
+                                    const courseCode = courseCell.textContent.trim();
+                                    const grade = gradeCell ? gradeCell.textContent.trim() : '';
+                                    // Skip withdrawn courses (they're already handled separately)
+                                    if (grade.toUpperCase() === 'W' || grade.toUpperCase().startsWith('W')) {
+                                        return;
+                                    }
+                                    const normalizedCode = courseCode.replace(/\s+/g, '');
+                                    excludedCourses.add(normalizedCode);
+                                    console.log(`Excluding course that doesn't apply: ${normalizedCode} (from section: "${headerText.substring(0, 50)}")`);
+                                }
+                            });
+                        });
+                    }
+                }
+            });
+            
+            // Also check for specific requirement names that indicate exclusion
+            const exclusionReqNames = ['W GRADES', 'OTHER', 'OTHERCRS', 'NON BACC'];
+            exclusionReqNames.forEach(reqName => {
+                const requirement = doc.querySelector(`.requirement[rname="${reqName}"]`);
+                if (requirement) {
+                    console.log(`Found exclusion requirement by name: ${reqName}`);
+                    const excludedTables = requirement.querySelectorAll('table.completedCourses');
+                    excludedTables.forEach(table => {
+                        const courseRows = table.querySelectorAll('tr.takenCourse');
+                        courseRows.forEach(row => {
+                            const courseCell = row.querySelector('.course');
+                            const gradeCell = row.querySelector('.grade');
+                            if (courseCell) {
+                                const courseCode = courseCell.textContent.trim();
+                                const grade = gradeCell ? gradeCell.textContent.trim() : '';
+                                // Skip withdrawn courses (they're already handled separately)
+                                if (grade.toUpperCase() === 'W' || grade.toUpperCase().startsWith('W')) {
+                                    return;
+                                }
+                                const normalizedCode = courseCode.replace(/\s+/g, '');
+                                excludedCourses.add(normalizedCode);
+                                console.log(`Excluding course from ${reqName} section: ${normalizedCode}`);
+                            }
+                        });
+                    });
+                }
+            });
+            
+            // Also exclude special course codes that indicate non-credit or non-transfer courses
+            const specialExclusionCodes = ['NOTRANSFER', 'NO TRANSFER', 'NONBACC', 'NON BACC'];
+            specialExclusionCodes.forEach(code => {
+                const normalizedCode = code.replace(/\s+/g, '');
+                excludedCourses.add(normalizedCode);
+                console.log(`Excluding special course code: ${normalizedCode}`);
+            });
+            
+            console.log(`Found ${excludedCourses.size} courses to exclude:`, Array.from(excludedCourses));
+
+            // Find all course tables
+            const courseTables = doc.querySelectorAll('table.completedCourses');
+            const coursesBySemester = {};
+
+            // Extract all courses
+            courseTables.forEach(table => {
+                const courseRows = table.querySelectorAll('tr.takenCourse');
+                courseRows.forEach(row => {
+                    const termCell = row.querySelector('.term');
+                    const courseCell = row.querySelector('.course');
+                    const creditCell = row.querySelector('.credit');
+                    const gradeCell = row.querySelector('.grade');
+
+                    if (termCell && courseCell && creditCell) {
+                        const termCode = termCell.textContent.trim();
+                        const courseCode = courseCell.textContent.trim();
+                        const credits = parseFloat(creditCell.textContent.trim());
+                        const grade = gradeCell ? gradeCell.textContent.trim() : '';
+
+                        // Skip invalid entries
+                        if (!termCode || !courseCode || isNaN(credits)) {
+                            return;
+                        }
+
+                        // Skip courses with "W" grade (withdrawn)
+                        if (grade.toUpperCase() === 'W' || grade.toUpperCase().startsWith('W')) {
+                            console.log(`Skipping withdrawn course: ${courseCode} (Grade: ${grade})`);
+                            return;
+                        }
+
+                        // Try to get course name from description cell
+                        const descCell = row.querySelector('.description');
+                        let courseName = null;
+                        if (descCell) {
+                            const descLine = descCell.querySelector('.descLine');
+                            if (descLine) {
+                                // Get the last line which is usually the course name
+                                const descLines = descCell.querySelectorAll('.descLine');
+                                if (descLines.length > 0) {
+                                    // Usually the course name is the last line (not transfer info)
+                                    courseName = Array.from(descLines).pop().textContent.trim();
+                                }
+                            }
+                        }
+
+                        // Normalize course code (remove spaces: "MATH 180" -> "MATH180")
+                        const normalizedCourseCode = courseCode.replace(/\s+/g, '');
+
+                        // Skip courses that don't apply toward the degree
+                        if (excludedCourses.has(normalizedCourseCode)) {
+                            console.log(`Skipping course that doesn't apply: ${courseCode} (normalized: ${normalizedCourseCode})`);
+                            return;
+                        }
+                        
+                        // Also check if the course code itself indicates it shouldn't be included
+                        // (e.g., "NO TRANSFER", "NON BACC", etc.)
+                        const upperCourseCode = courseCode.toUpperCase();
+                        if (upperCourseCode.includes('NO TRANSFER') || 
+                            upperCourseCode.includes('NOTRANSFER') ||
+                            upperCourseCode.includes('NON BACC') ||
+                            upperCourseCode.includes('NONBACC') ||
+                            upperCourseCode === 'NO TRANSFER' ||
+                            upperCourseCode === 'NOTRANSFER') {
+                            console.log(`Skipping special exclusion course code: ${courseCode}`);
+                            return;
+                        }
+
+                        // Convert term code to semester ID
+                        const semesterId = this.convertTermCodeToSemesterId(termCode);
+                        if (!semesterId) {
+                            console.warn(`Could not convert term code: ${termCode}`);
+                            return;
+                        }
+
+                        // Group courses by semester
+                        if (!coursesBySemester[semesterId]) {
+                            coursesBySemester[semesterId] = [];
+                        }
+
+                        // Avoid duplicates
+                        const existing = coursesBySemester[semesterId].find(c => c.code === normalizedCourseCode);
+                        if (!existing) {
+                            coursesBySemester[semesterId].push({
+                                code: normalizedCourseCode,
+                                originalCode: courseCode,
+                                credits: credits,
+                                name: courseName
+                            });
+                        }
+                    }
+                });
+            });
+
+            // Store parsed data for preview
+            this.pendingImport = coursesBySemester;
+            console.log('Parsed semesters from audit:', Object.keys(coursesBySemester));
+            console.log('Courses by semester:', coursesBySemester);
+            
+            // Debug: Check specifically for Spring 2023
+            if (coursesBySemester['Spring2023']) {
+                console.log('Spring2023 courses found:', coursesBySemester['Spring2023']);
+            } else {
+                console.warn('Spring2023 NOT found in parsed courses. Available semesters:', Object.keys(coursesBySemester));
+            }
+            
+            this.showImportPreview(coursesBySemester);
+
+        } catch (error) {
+            console.error('Error parsing audit HTML:', error);
+            this.showFeedback('error', 'Error parsing degree audit. Please check the file format.');
+        }
+    }
+
+    convertTermCodeToSemesterId(termCode) {
+        // Term code format: FA22, WS24, SU23
+        // Semester ID format: Fall2022, Spring2024, Summer2023
+        
+        if (!termCode || termCode.length < 4) {
+            return null;
+        }
+
+        const prefix = termCode.substring(0, 2).toUpperCase();
+        const yearCode = termCode.substring(2, 4);
+        
+        // Convert 2-digit year to 4-digit year
+        // Assuming years 20-99 are 2000s, 00-19 are 2000s (adjust if needed)
+        let fullYear = 2000 + parseInt(yearCode);
+        if (fullYear > 2050) {
+            fullYear = 1900 + parseInt(yearCode);
+        }
+
+        // Map term prefixes
+        let term;
+        if (prefix === 'FA') {
+            term = 'Fall';
+        } else if (prefix === 'WS' || prefix === 'SP') {
+            term = 'Spring';
+        } else if (prefix === 'SU') {
+            term = 'Summer';
+        } else if (prefix === 'WI') {
+            term = 'Winter';
+        } else {
+            console.warn(`Unknown term prefix: ${prefix}`);
+            return null;
+        }
+
+        return `${term}${fullYear}`;
+    }
+
+    showImportPreview(coursesBySemester) {
+        const previewContainer = document.getElementById('importPreview');
+        const actionsContainer = document.getElementById('importActions');
+        
+        // Count totals
+        let totalCourses = 0;
+        let matchedCourses = 0;
+        let unmatchedCourses = 0;
+        const unmatchedList = [];
+
+        // Helper function to check if a course will be imported (either in catalog or will be auto-added)
+        const willBeImported = (course) => {
+            // Check if already in catalog
+            if (courseCatalog[course.code]) {
+                return true;
+            }
+            
+            // Check if it's a technical elective (CS 300-499) that will be auto-added
+            const csMatch = course.code.match(/^CS\s*(\d+)$/);
+            if (csMatch) {
+                const courseNumber = parseInt(csMatch[1]);
+                if (courseNumber >= 300 && courseNumber < 500) {
+                    return true; // Will be auto-added as technical elective
+                }
+            }
+            
+            // Check if it's a gen ed course that was found in gen ed sections
+            if (this.genEdCoursesByCategory) {
+                for (const category in this.genEdCoursesByCategory) {
+                    const coursesInCategory = this.genEdCoursesByCategory[category];
+                    if (coursesInCategory.some(c => {
+                        const courseId = typeof c === 'string' ? c : c.courseId;
+                        return courseId === course.code;
+                    })) {
+                        return true; // Found in gen ed sections, will be imported
+                    }
+                }
+            }
+            
+            // Check if it's a course with valid info that will likely be auto-added
+            // (has name, credits, and is not excluded)
+            if (course.name && course.credits && course.credits > 0) {
+                // Likely a valid course that will be added (gen ed, etc.)
+                return true;
+            }
+            
+            return false;
+        };
+
+        Object.keys(coursesBySemester).forEach(semesterId => {
+            coursesBySemester[semesterId].forEach(course => {
+                totalCourses++;
+                if (willBeImported(course)) {
+                    matchedCourses++;
+                } else {
+                    unmatchedCourses++;
+                    unmatchedList.push(course.originalCode);
+                }
+            });
+        });
+
+        // Build preview HTML
+        let previewHTML = '<div style="max-height: 400px; overflow-y: auto;">';
+        previewHTML += `<h3>Import Preview</h3>`;
+        previewHTML += `<p><strong>Total courses found:</strong> ${totalCourses}</p>`;
+        previewHTML += `<p><strong>Matched courses:</strong> ${matchedCourses} (will be imported)</p>`;
+        
+        if (unmatchedCourses > 0) {
+            previewHTML += `<p><strong>Unmatched courses:</strong> ${unmatchedCourses} (will be skipped)</p>`;
+            previewHTML += `<details style="margin-top: 10px;"><summary>Unmatched courses</summary><ul style="margin-top: 5px;">`;
+            unmatchedList.forEach(code => {
+                previewHTML += `<li>${code}</li>`;
+            });
+            previewHTML += `</ul></details>`;
+        }
+
+        previewHTML += '<h4 style="margin-top: 20px;">Courses by Semester:</h4>';
+        
+        // Sort semesters chronologically
+        const sortedSemesters = Object.keys(coursesBySemester).sort((a, b) => {
+            // Extract year and term for sorting
+            const aMatch = a.match(/(\w+)(\d{4})/);
+            const bMatch = b.match(/(\w+)(\d{4})/);
+            if (!aMatch || !bMatch) return 0;
+            
+            const aYear = parseInt(aMatch[2]);
+            const bYear = parseInt(bMatch[2]);
+            if (aYear !== bYear) return aYear - bYear;
+            
+            // Academic year order: Fall comes first, then Winter, Spring, Summer
+            const termOrder = { 'Fall': 0, 'Winter': 1, 'Spring': 2, 'Summer': 3 };
+            return (termOrder[aMatch[1]] || 0) - (termOrder[bMatch[1]] || 0);
+        });
+
+            sortedSemesters.forEach(semesterId => {
+                const courses = coursesBySemester[semesterId];
+                const matched = courses.filter(c => willBeImported(c));
+                
+                if (matched.length > 0) {
+                    previewHTML += `<div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 4px;">`;
+                    previewHTML += `<strong>${semesterId}:</strong> ${matched.length} course(s)<ul style="margin-top: 5px; margin-left: 20px;">`;
+                    matched.forEach(course => {
+                        const catalogCourse = courseCatalog[course.code];
+                        if (catalogCourse) {
+                            previewHTML += `<li>${catalogCourse.code} - ${catalogCourse.name} (${course.credits} credits)</li>`;
+                        } else {
+                            // Course will be auto-added
+                            const displayCode = course.originalCode || course.code.replace(/([A-Z]+)(\d+)/, '$1 $2');
+                            const displayName = course.name || `${displayCode} - (will be added to catalog)`;
+                            previewHTML += `<li>${displayCode} - ${displayName} (${course.credits} credits)</li>`;
+                        }
+                    });
+                    previewHTML += `</ul></div>`;
+                }
+            });
+
+        previewHTML += '</div>';
+        previewContainer.innerHTML = previewHTML;
+        actionsContainer.style.display = 'block';
+
+        // Show modal
+        document.getElementById('importModal').classList.add('show');
+    }
+
+    confirmImport() {
+        if (!this.pendingImport) {
+            return;
+        }
+
+        // Find the earliest semester from the import
+        const earliestSemester = this.findEarliestSemester(this.pendingImport);
+        
+        // Check if there are any Summer semesters in the import
+        const hasSummerSemesters = Object.keys(this.pendingImport).some(semesterId => {
+            return semesterId.startsWith('Summer');
+        });
+        
+        if (earliestSemester) {
+            // Extract year and term from earliest semester ID (e.g., "Fall2022")
+            const match = earliestSemester.match(/(\w+)(\d{4})/);
+            if (match) {
+                const startTerm = match[1];
+                const startYear = parseInt(match[2]);
+                
+                // Store the start semester info
+                this.userProgress.startSemester = {
+                    term: startTerm,
+                    year: startYear,
+                    includeSummer: hasSummerSemesters
+                };
+                
+                // Regenerate semesters starting from the earliest semester
+                const existingCoursesBySemester = {};
+                this.userProgress.semesters.forEach(sem => {
+                    if (sem.courses.length > 0) {
+                        existingCoursesBySemester[sem.id] = {
+                            courses: [...sem.courses],
+                            credits: sem.credits,
+                            status: sem.status
+                        };
+                    }
+                });
+                
+                // Generate semesters based on what's actually in the audit, not a fixed pattern
+                const newSemesters = this.generateSemestersFromAudit(this.pendingImport, startYear, startTerm, hasSummerSemesters);
+                
+                // Preserve existing courses and merge with imported courses
+                newSemesters.forEach(sem => {
+                    // Restore existing courses if any
+                    if (existingCoursesBySemester[sem.id]) {
+                        sem.courses = existingCoursesBySemester[sem.id].courses;
+                        sem.credits = existingCoursesBySemester[sem.id].credits;
+                        sem.status = existingCoursesBySemester[sem.id].status;
+                    }
+                    
+                    // Add imported courses for this semester
+                    if (this.pendingImport[sem.id]) {
+                        console.log(`Adding courses to ${sem.id}:`, this.pendingImport[sem.id].map(c => c.code));
+                        this.pendingImport[sem.id].forEach(course => {
+                            // Check if course exists in catalog, if not, try to add it
+                            if (!courseCatalog[course.code]) {
+                                // Try to add missing course to catalog (for technical electives)
+                                this.addMissingCourseToCatalog(course);
+                            }
+                            
+                            if (courseCatalog[course.code]) {
+                                if (!sem.courses.includes(course.code)) {
+                                    sem.courses.push(course.code);
+                                    sem.credits += course.credits;
+                                    console.log(`Added ${course.code} to ${sem.id}`);
+                                } else {
+                                    console.log(`Course ${course.code} already in ${sem.id}`);
+                                }
+                            } else {
+                                console.warn(`Course ${course.code} not found in catalog, skipping`);
+                                
+                                // Check if it's a math elective from the audit
+                                const isMathElective = this.mathElectivesFromAudit && this.mathElectivesFromAudit.includes(course.code);
+                                
+                                // For gen ed courses or math electives, add them to catalog if they're not there
+                                if (course.name) {
+                                    const originalCode = course.originalCode || course.code.replace(/([A-Z]+)(\d+)/, '$1 $2');
+                                    // Determine category: math elective if found in audit, otherwise general
+                                    const category = isMathElective ? "math" : "general";
+                                    
+                                    courseCatalog[course.code] = {
+                                        id: course.code,
+                                        code: originalCode,
+                                        name: course.name,
+                                        credits: course.credits || 3,
+                                        prerequisites: [],
+                                        offeredIn: ["Fall", "Spring"],
+                                        category: category,
+                                        description: isMathElective ? `Math elective course - ${course.name}` : `General education course - ${course.name}`
+                                    };
+                                    console.log(`Auto-added ${course.code} to catalog: ${course.name} (category: ${category})`);
+                                    // Now add it to the semester
+                                    if (!sem.courses.includes(course.code)) {
+                                        sem.courses.push(course.code);
+                                        sem.credits += course.credits;
+                                        console.log(`Added ${course.code} to ${sem.id} after auto-adding to catalog`);
+                                    }
+                                }
+                            }
+                        });
+                    } else {
+                        console.log(`No courses found in pendingImport for ${sem.id}`);
+                    }
+                });
+                
+                // Handle Winter semesters that don't match Fall/Spring/Summer
+                // Map Winter courses to Spring of the same year
+                Object.keys(this.pendingImport).forEach(semesterId => {
+                    const match = semesterId.match(/(\w+)(\d{4})/);
+                    if (match) {
+                        const term = match[1];
+                        const year = parseInt(match[2]);
+                        
+                        if (term === 'Winter') {
+                            const springSemesterId = `Spring${year}`;
+                            const springSem = newSemesters.find(s => s.id === springSemesterId);
+                            if (springSem && this.pendingImport[semesterId]) {
+                                this.pendingImport[semesterId].forEach(course => {
+                                    if (courseCatalog[course.code] && !springSem.courses.includes(course.code)) {
+                                        springSem.courses.push(course.code);
+                                        springSem.credits += course.credits;
+                                    }
+                                });
+                            }
+                        }
+                    }
+                });
+                
+                // Filter out semesters with 0 courses, BUT keep the current/in-progress semester even if empty
+                const semestersWithCourses = newSemesters.filter(sem => {
+                    // Keep semester if it has courses OR if it's marked as current/in-progress
+                    const shouldKeep = sem.courses.length > 0 || sem.status === "current" || sem.status === "in-progress";
+                    if (!shouldKeep && sem.id === 'Spring2023') {
+                        console.warn(`Spring2023 is being filtered out! Courses: ${sem.courses.length}, Status: ${sem.status}`);
+                    }
+                    return shouldKeep;
+                });
+                console.log('Filtered semesters (removed empty ones, but kept current):', {
+                    before: newSemesters.map(s => `${s.id} (${s.courses.length} courses, ${s.status})`),
+                    after: semestersWithCourses.map(s => `${s.id} (${s.courses.length} courses, ${s.status})`)
+                });
+                
+                // Debug: Check if Spring2023 is in the filtered list
+                const spring2023InFiltered = semestersWithCourses.find(s => s.id === 'Spring2023');
+                if (spring2023InFiltered) {
+                    console.log('Spring2023 is in filtered semesters:', spring2023InFiltered);
+                } else {
+                    console.error('Spring2023 is MISSING from filtered semesters!');
+                    console.log('All filtered semesters:', semestersWithCourses.map(s => s.id));
+                }
+                
+                // Update user progress with semesters that have courses or are current
+                this.userProgress.semesters = semestersWithCourses;
+                console.log('Updated userProgress.semesters:', semestersWithCourses.map(s => s.id));
+                
+                // Calculate total credits to check if graduation requirement is met
+                const totalCredits = semestersWithCourses.reduce((sum, semester) => {
+                    return sum + (semester.credits || 0);
+                }, 0);
+                const graduationRequirement = 128;
+                const hasMetGraduationRequirement = totalCredits >= graduationRequirement;
+                
+                console.log(`Total credits: ${totalCredits}/${graduationRequirement}, hasMetGraduationRequirement: ${hasMetGraduationRequirement}`);
+                
+                // Set current semester - find the first semester that should be current
+                // If no semester is marked as current, mark the first one after the last semester with courses
+                let currentSem = semestersWithCourses.find(s => s.status === "current");
+                
+                if (!currentSem && semestersWithCourses.length > 0) {
+                    // Find the last semester with courses
+                    const lastSemesterWithCourses = semestersWithCourses.filter(s => s.courses.length > 0).pop();
+                    if (lastSemesterWithCourses) {
+                        // Mark the next semester after the last one with courses as current
+                        const lastIndex = semestersWithCourses.indexOf(lastSemesterWithCourses);
+                        if (lastIndex < semestersWithCourses.length - 1) {
+                            currentSem = semestersWithCourses[lastIndex + 1];
+                        } else {
+                            // Only add a new semester for planning if graduation requirement is NOT met
+                            if (!hasMetGraduationRequirement) {
+                                // If the last semester with courses is the last semester, add a new one for planning
+                                const termOrder = { 'Fall': 0, 'Winter': 1, 'Spring': 2, 'Summer': 3 };
+                                const lastMatch = lastSemesterWithCourses.id.match(/(\w+)(\d{4})/);
+                                if (lastMatch) {
+                                    const lastTerm = lastMatch[1];
+                                    const lastYear = parseInt(lastMatch[2]);
+                                    const hasSummer = semestersWithCourses.some(s => s.id.startsWith('Summer'));
+                                    const terms = hasSummer ? ["Fall", "Spring", "Summer"] : ["Fall", "Spring"];
+                                    const termOrderMap = { "Fall": 0, "Spring": 1, "Summer": 2 };
+                                    
+                                    let nextYear = lastYear;
+                                    let nextTermIndex = termOrderMap[lastTerm] !== undefined ? termOrderMap[lastTerm] : 0;
+                                    nextTermIndex = (nextTermIndex + 1) % terms.length;
+                                    if (nextTermIndex === 0) {
+                                        nextYear++;
+                                    }
+                                    
+                                    const nextSemesterId = `${terms[nextTermIndex]}${nextYear}`;
+                                    currentSem = {
+                                        id: nextSemesterId,
+                                        term: terms[nextTermIndex],
+                                        year: nextYear,
+                                        courses: [],
+                                        credits: 0,
+                                        status: "current"
+                                    };
+                                    semestersWithCourses.push(currentSem);
+                                    console.log(`Added future semester ${nextSemesterId} for planning (credits: ${totalCredits}/${graduationRequirement})`);
+                                }
+                            } else {
+                                console.log(`Not adding future semester - graduation requirement met (${totalCredits}/${graduationRequirement} credits)`);
+                            }
+                        }
+                    } else {
+                        // If no semesters have courses, mark the first one as current
+                        currentSem = semestersWithCourses[0];
+                    }
+                }
+                
+                if (currentSem) {
+                    this.userProgress.currentSemester = currentSem.id;
+                    // Mark the current semester
+                    currentSem.status = "current";
+                }
+                
+                // If graduation requirement is met, remove any empty future semesters
+                if (hasMetGraduationRequirement) {
+                    const lastSemesterWithCourses = semestersWithCourses.filter(s => s.courses.length > 0).pop();
+                    if (lastSemesterWithCourses) {
+                        const lastIndex = semestersWithCourses.indexOf(lastSemesterWithCourses);
+                        // Remove any semesters after the last one with courses
+                        if (lastIndex < semestersWithCourses.length - 1) {
+                            const semestersToRemove = semestersWithCourses.slice(lastIndex + 1);
+                            semestersToRemove.forEach(sem => {
+                                console.log(`Removing empty future semester ${sem.id} - graduation requirement met`);
+                            });
+                            semestersWithCourses.splice(lastIndex + 1);
+                            // Update userProgress with the filtered list
+                            this.userProgress.semesters = semestersWithCourses;
+                        }
+                    }
+                }
+            }
+        }
+
+        let importedCount = 0;
+        let skippedCount = 0;
+
+        // Count imported courses
+        Object.keys(this.pendingImport).forEach(semesterId => {
+            this.pendingImport[semesterId].forEach(course => {
+                if (courseCatalog[course.code]) {
+                    const semester = this.userProgress.semesters.find(s => s.id === semesterId);
+                    if (semester && semester.courses.includes(course.code)) {
+                        importedCount++;
+                    } else {
+                        skippedCount++;
+                    }
+                }
+            });
+        });
+
+        // Process technical electives - update electives list based on what was taken
+        this.updateTechnicalElectivesFromAudit();
+
+        // Process math electives - store math electives found in audit
+        if (this.mathElectivesFromAudit) {
+            if (!this.userProgress.mathElectivesFromAudit) {
+                this.userProgress.mathElectivesFromAudit = [];
+            }
+            // Merge with existing, avoiding duplicates
+            const existing = new Set(this.userProgress.mathElectivesFromAudit);
+            this.mathElectivesFromAudit.forEach(courseId => existing.add(courseId));
+            this.userProgress.mathElectivesFromAudit = Array.from(existing);
+            console.log('Updated math electives from audit:', this.userProgress.mathElectivesFromAudit);
+        }
+
+        // Process general education courses - replace placeholders with actual courses
+        this.updateGeneralEducationFromAudit();
+
+        // Clean up unused free elective placeholders
+        this.cleanupFreeElectivePlaceholders();
+
+        // Clean up math elective placeholders if requirement is met
+        this.cleanupMathElectivePlaceholders();
+
+        // Save and refresh
+        this.saveUserProgress();
+        this.updateProgress();
+        this.renderRoadmap();
+        
+        // Force re-render of available courses to ensure math electives are hidden if requirement is met
+        // This ensures shouldHideCourse is called with the updated course count
+        this.renderAvailableCourses();
+        
+        this.closeImportModal();
+
+        // Show feedback
+        if (importedCount > 0) {
+            let message = `Successfully imported ${importedCount} course(s) from degree audit! Roadmap now starts from ${earliestSemester}.`;
+            if (hasSummerSemesters) {
+                message += ' Summer semesters have been included in your roadmap.';
+            }
+            this.showFeedback('success', message);
+        } else {
+            this.showFeedback('info', 'No new courses were imported. They may already be in your roadmap.');
+        }
+
+        // Clear pending import
+        this.pendingImport = null;
+        
+        // Reset file input
+        document.getElementById('auditFileInput').value = '';
+    }
+
+    findEarliestSemester(coursesBySemester) {
+        let earliest = null;
+        let earliestYear = Infinity;
+        let earliestTermOrder = Infinity;
+        
+        // Academic year order: Fall comes first, then Winter, Spring, Summer
+        const termOrder = { 'Fall': 0, 'Winter': 1, 'Spring': 2, 'Summer': 3 };
+        
+        Object.keys(coursesBySemester).forEach(semesterId => {
+            const match = semesterId.match(/(\w+)(\d{4})/);
+            if (match) {
+                const term = match[1];
+                const year = parseInt(match[2]);
+                const termOrd = termOrder[term] !== undefined ? termOrder[term] : 999;
+                
+                if (year < earliestYear || (year === earliestYear && termOrd < earliestTermOrder)) {
+                    earliestYear = year;
+                    earliestTermOrder = termOrd;
+                    earliest = semesterId;
+                }
+            }
+        });
+        
+        return earliest;
+    }
+
+    generateSemestersFromAudit(coursesBySemester, startYear, startTerm, includeSummer) {
+        const semesters = [];
+        const termOrder = { 'Fall': 0, 'Winter': 1, 'Spring': 2, 'Summer': 3 };
+        
+        // STEP 1: Get ALL unique semester IDs from the audit (these are the ONLY semesters that have courses)
+        const auditSemesterIds = Object.keys(coursesBySemester);
+        console.log('Semesters found in audit:', auditSemesterIds);
+        console.log('CoursesBySemester keys:', Object.keys(coursesBySemester));
+        
+        // Debug: Check for Spring 2023 specifically
+        if (coursesBySemester['Spring2023']) {
+            console.log('Spring2023 found in coursesBySemester with', coursesBySemester['Spring2023'].length, 'courses');
+        } else {
+            console.warn('Spring2023 NOT in coursesBySemester! Available:', Object.keys(coursesBySemester));
+        }
+        
+        // STEP 2: Sort them chronologically
+        // Chronological order within a year: Spring, Summer, Fall, Winter
+        const chronologicalTermOrder = { 'Spring': 0, 'Summer': 1, 'Fall': 2, 'Winter': 3 };
+        
+        const sortedAuditSemesters = auditSemesterIds.sort((a, b) => {
+            const aMatch = a.match(/(\w+)(\d{4})/);
+            const bMatch = b.match(/(\w+)(\d{4})/);
+            if (!aMatch || !bMatch) return 0;
+            
+            const aYear = parseInt(aMatch[2]);
+            const bYear = parseInt(bMatch[2]);
+            
+            // First sort by year
+            if (aYear !== bYear) return aYear - bYear;
+            
+            // Then sort by term order within the same year (Spring, Summer, Fall, Winter)
+            const aTermOrd = chronologicalTermOrder[aMatch[1]] !== undefined ? chronologicalTermOrder[aMatch[1]] : 999;
+            const bTermOrd = chronologicalTermOrder[bMatch[1]] !== undefined ? chronologicalTermOrder[bMatch[1]] : 999;
+            return aTermOrd - bTermOrd;
+        });
+        
+        console.log('Sorted semesters from audit:', sortedAuditSemesters);
+        
+        // STEP 3: Create semester objects ONLY for semesters that exist in the audit
+        // DO NOT create any semesters that aren't in the audit - only show semesters where classes were taken
+        sortedAuditSemesters.forEach(semesterId => {
+            const match = semesterId.match(/(\w+)(\d{4})/);
+            if (match) {
+                const term = match[1];
+                const year = parseInt(match[2]);
+                
+                semesters.push({
+                    id: semesterId,
+                    term: term,
+                    year: year,
+                    courses: [],
+                    credits: 0,
+                    status: "planned"
+                });
+            }
+        });
+        
+        console.log('Created semesters from audit (ONLY semesters with courses):', semesters.map(s => s.id));
+        
+        // DO NOT add any future semesters - only show semesters where classes were actually taken
+        // If user wants to plan future semesters, they can add them manually
+        
+        return semesters;
+    }
+
+    closeImportModal() {
+        document.getElementById('importModal').classList.remove('show');
+        this.pendingImport = null;
+        document.getElementById('auditFileInput').value = '';
+    }
+
+    // Add missing course to catalog (for technical electives not in predefined list)
+    addMissingCourseToCatalog(course) {
+        // Check if it's a CS course (technical elective)
+        // Handle both "CS 401" and "CS401" formats
+        const courseCodeMatch = course.code.match(/^CS\s*(\d+)$/);
+        if (courseCodeMatch) {
+            const courseNumber = parseInt(courseCodeMatch[1]);
+            // CS 300-499 are technical electives
+            if (courseNumber >= 300 && courseNumber < 500) {
+                // Normalize course ID (remove spaces)
+                const courseId = course.code.replace(/\s+/g, '');
+                if (!courseCatalog[courseId]) {
+                    // Try to get course name from the audit HTML if available
+                    // For now, use a generic name
+                    // Use course name from audit if available, otherwise use generic name
+                    const courseName = course.name || `${course.code} - Technical Elective`;
+                    const courseCodeFormatted = course.code.includes(' ') ? course.code : course.code.replace(/(\d+)/, ' $1');
+                    
+                    courseCatalog[courseId] = {
+                        id: courseId,
+                        code: courseCodeFormatted,
+                        name: courseName,
+                        credits: course.credits,
+                        prerequisites: [],
+                        offeredIn: ["Fall", "Spring"],
+                        category: "elective",
+                        description: `Technical elective course - ${course.code}`
+                    };
+                    console.log(`Added missing technical elective to catalog: ${courseId}`);
+                }
+            }
+        }
+    }
+
+    // Update technical electives list based on courses taken from audit
+    updateTechnicalElectivesFromAudit() {
+        if (!this.pendingImport) return;
+        
+        // Collect all CS 300-499 level courses from the import
+        const technicalElectivesTaken = new Set();
+        const allScheduledCourses = this.getAllScheduledCourses();
+        
+        // Get all CS courses that are 300-499 level
+        allScheduledCourses.forEach(courseId => {
+            const course = courseCatalog[courseId];
+            if (course && course.code.match(/^CS\s*[3-4]\d{2}$/)) {
+                const match = course.code.match(/^CS\s*(\d+)$/);
+                if (match) {
+                    const courseNumber = parseInt(match[1]);
+                    if (courseNumber >= 300 && courseNumber < 500) {
+                        technicalElectivesTaken.add(courseId);
+                    }
+                }
+            }
+        });
+        
+        // Also check courses from pendingImport that might not be in catalog yet
+        Object.values(this.pendingImport).forEach(courses => {
+            courses.forEach(course => {
+                // Handle both "CS401" and "CS 401" formats
+                const courseCodeMatch = course.code.match(/^CS\s*(\d+)$/);
+                if (courseCodeMatch) {
+                    const courseNumber = parseInt(courseCodeMatch[1]);
+                    if (courseNumber >= 300 && courseNumber < 500) {
+                        // Normalize course ID
+                        const courseId = course.code.replace(/\s+/g, '');
+                        if (courseCatalog[courseId]) {
+                            technicalElectivesTaken.add(courseId);
+                        }
+                    }
+                }
+            });
+        });
+        
+        // Store the list of technical electives taken in userProgress
+        // This will be used to dynamically update getCSElectives()
+        if (!this.userProgress.technicalElectivesTaken) {
+            this.userProgress.technicalElectivesTaken = [];
+        }
+        
+        // Update the list with all technical electives taken
+        this.userProgress.technicalElectivesTaken = Array.from(technicalElectivesTaken);
+        console.log('Technical electives taken:', this.userProgress.technicalElectivesTaken);
+    }
+
+    // Update general education courses - replace placeholders with actual courses taken
+    updateGeneralEducationFromAudit() {
+        if (!this.genEdCoursesByCategory) return;
+
+        // Map of gen ed category to placeholder course ID(s)
+        const genEdPlaceholderMap = {
+            'Exploring World Cultures': 'GEN101',
+            'Understanding the Creative Arts': 'GEN102',
+            'Understanding the Past': 'GEN103',
+            'Understanding the Individual and Society': 'GEN104',
+            'Understanding U.S. Society': 'GEN105',
+            'Additional General Education Electives': ['GEN106', 'GEN107'] // 6 hours = 2 courses
+        };
+
+        // Store gen ed course mappings
+        if (!this.userProgress.genEdMappings) {
+            this.userProgress.genEdMappings = {};
+        }
+
+        // For each gen ed category, find the course taken and map it
+        Object.keys(this.genEdCoursesByCategory).forEach(category => {
+            const coursesTaken = this.genEdCoursesByCategory[category];
+            if (coursesTaken && coursesTaken.length > 0) {
+                const placeholderIds = genEdPlaceholderMap[category];
+                
+                // Handle Additional General Education Electives (multiple courses)
+                if (category === 'Additional General Education Electives' && Array.isArray(placeholderIds)) {
+                    // Map up to 2 courses to GEN106 and GEN107
+                    coursesTaken.slice(0, 2).forEach((courseData, index) => {
+                        if (index < placeholderIds.length) {
+                            const placeholderId = placeholderIds[index];
+                            const actualCourseId = typeof courseData === 'string' ? courseData : courseData.courseId;
+                            const actualSemesterId = typeof courseData === 'object' ? courseData.semesterId : null;
+                            const courseInfo = typeof courseData === 'object' ? courseData : null;
+                            
+                            this.processGenEdMapping(category, placeholderId, actualCourseId, actualSemesterId, courseInfo);
+                        }
+                    });
+                    return; // Skip the single-course logic below
+                }
+                
+                // Handle single-course gen ed requirements
+                const placeholderId = Array.isArray(placeholderIds) ? placeholderIds[0] : placeholderIds;
+                if (!placeholderId) return;
+                
+                // Use the first course taken for this category
+                // coursesTaken is now an array of objects with courseId, semesterId, etc.
+                const firstCourse = coursesTaken[0];
+                const actualCourseId = typeof firstCourse === 'string' ? firstCourse : firstCourse.courseId;
+                const actualSemesterId = typeof firstCourse === 'object' ? firstCourse.semesterId : null;
+                const courseInfo = typeof firstCourse === 'object' ? firstCourse : null;
+                
+                if (actualCourseId) {
+                    this.processGenEdMapping(category, placeholderId, actualCourseId, actualSemesterId, courseInfo);
+                }
+            }
+        });
+
+        console.log('Gen Ed mappings:', this.userProgress.genEdMappings);
+    }
+
+    // Helper method to process a single gen ed mapping
+    processGenEdMapping(category, placeholderId, actualCourseId, actualSemesterId, courseInfo) {
+        if (!placeholderId || !actualCourseId) return;
+                    console.log(`Processing gen ed mapping: ${category} -> ${placeholderId} -> ${actualCourseId}`);
+                    
+                    // Add the actual course to catalog if not already there
+                    if (!courseCatalog[actualCourseId]) {
+                        // Use courseInfo from gen ed parsing, or try to find from pendingImport
+                        let finalCourseInfo = courseInfo;
+                        if (!finalCourseInfo) {
+                            Object.values(this.pendingImport || {}).forEach(courses => {
+                                const found = courses.find(c => c.code === actualCourseId);
+                                if (found) {
+                                    finalCourseInfo = found;
+                                }
+                            });
+                        }
+
+                        if (finalCourseInfo) {
+                            const originalCode = finalCourseInfo.originalCode || actualCourseId.replace(/([A-Z]+)(\d+)/, '$1 $2');
+                            const courseName = finalCourseInfo.name || `${actualCourseId} - General Education`;
+                            const credits = finalCourseInfo.credits || 3;
+                            
+                            courseCatalog[actualCourseId] = {
+                                id: actualCourseId,
+                                code: originalCode,
+                                name: courseName,
+                                credits: credits,
+                                prerequisites: [],
+                                offeredIn: ["Fall", "Spring"],
+                                category: "general",
+                                description: `${category} requirement - ${courseName}`
+                            };
+                            console.log(`Added gen ed course to catalog: ${actualCourseId} (${category}) - ${courseName}`);
+                        } else {
+                            console.warn(`Could not find course info for ${actualCourseId} (${category})`);
+                        }
+                    } else {
+                        console.log(`Gen ed course ${actualCourseId} already in catalog`);
+                    }
+
+                    // Store the mapping
+                    this.userProgress.genEdMappings[placeholderId] = actualCourseId;
+                    console.log(`Mapped ${category}: ${placeholderId} -> ${actualCourseId}`);
+
+                    // Always remove placeholder instances from semesters since the actual course is already there
+                    // The actual course should already be in the correct semester from the regular parsing
+                    this.userProgress.semesters.forEach(semester => {
+                        const placeholderIndex = semester.courses.indexOf(placeholderId);
+                        if (placeholderIndex !== -1) {
+                            console.log(`Removing placeholder ${placeholderId} from ${semester.id} (replaced with ${actualCourseId})`);
+                            semester.courses.splice(placeholderIndex, 1);
+                            const placeholderCredits = courseCatalog[placeholderId]?.credits || 3;
+                            semester.credits = Math.max(0, semester.credits - placeholderCredits);
+                        }
+                    });
+
+                    // Ensure the actual course is in the correct semester if it's not already there
+                    // Find the semester where this course should be based on the audit
+                    if (actualSemesterId) {
+                        const targetSemester = this.userProgress.semesters.find(s => s.id === actualSemesterId);
+                        if (targetSemester && !targetSemester.courses.includes(actualCourseId)) {
+                            // Add the course to the correct semester
+                            targetSemester.courses.push(actualCourseId);
+                            if (courseCatalog[actualCourseId]) {
+                                targetSemester.credits += courseCatalog[actualCourseId].credits;
+                            }
+                            console.log(`Added ${actualCourseId} to ${actualSemesterId}`);
+                        }
+                    }
+    }
+
+    // Clean up unused free elective placeholders
+    cleanupFreeElectivePlaceholders() {
+        const freeElectivePlaceholders = ['FREE001', 'FREE002', 'FREE003'];
+        const allScheduledCourses = this.getAllScheduledCourses();
+        
+        // Count how many free elective placeholders are actually in use
+        const usedPlaceholders = freeElectivePlaceholders.filter(placeholder => 
+            allScheduledCourses.includes(placeholder)
+        );
+        
+        // If there are unused placeholders, remove them from semesters
+        // Keep only the ones that are actually scheduled
+        freeElectivePlaceholders.forEach(placeholder => {
+            if (!allScheduledCourses.includes(placeholder)) {
+                // Remove this placeholder from all semesters
+                this.userProgress.semesters.forEach(semester => {
+                    const placeholderIndex = semester.courses.indexOf(placeholder);
+                    if (placeholderIndex !== -1) {
+                        console.log(`Removing unused free elective placeholder ${placeholder} from ${semester.id}`);
+                        semester.courses.splice(placeholderIndex, 1);
+                        const placeholderCredits = courseCatalog[placeholder]?.credits || 3;
+                        semester.credits = Math.max(0, semester.credits - placeholderCredits);
+                    }
+                });
+            }
+        });
+        
+        console.log(`Free elective cleanup: ${usedPlaceholders.length} placeholders in use, ${freeElectivePlaceholders.length - usedPlaceholders.length} removed`);
+    }
+
+    // Clean up math elective placeholders if requirement is already met
+    cleanupMathElectivePlaceholders() {
+        const mathElectiveCourseCount = this.getMathElectiveCourseCount();
+        
+        console.log(`Math elective cleanup: ${mathElectiveCourseCount} courses scheduled (requirement: 3)`);
+        
+        // If 3 or more math elective courses are already scheduled, ensure math electives are hidden
+        // The shouldHideCourse function should handle this, but we'll log it for debugging
+        if (mathElectiveCourseCount >= 3) {
+            console.log(`Math elective requirement met (${mathElectiveCourseCount} courses). Math electives should be hidden from available courses.`);
+        } else {
+            console.log(`Math elective requirement not yet met (${mathElectiveCourseCount}/3 courses). Math electives should be visible.`);
         }
     }
 }
