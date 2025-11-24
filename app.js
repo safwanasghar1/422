@@ -9,11 +9,8 @@ class GradPathApp {
     }
 
     init() {
-        // Set year selector to match user progress
-        const yearSelector = document.getElementById('userYear');
-        if (yearSelector) {
-            yearSelector.value = this.userProgress.year;
-        }
+        // Update academic standing display based on credits
+        this.updateAcademicStanding();
         
         this.setupEventListeners();
         this.renderRoadmap();
@@ -30,12 +27,6 @@ class GradPathApp {
                 const parsed = JSON.parse(saved);
                 // Validate that semesters array exists and has correct structure
                 if (parsed.semesters && Array.isArray(parsed.semesters)) {
-                    console.log('Loaded from localStorage:', {
-                        semesterCount: parsed.semesters.length,
-                        semesterIds: parsed.semesters.map(s => s.id),
-                        startSemester: parsed.startSemester
-                    });
-                    
                     // If startSemester is stored, use it to regenerate semesters if needed
                     if (parsed.startSemester) {
                         const { term, year, includeSummer } = parsed.startSemester;
@@ -55,11 +46,6 @@ class GradPathApp {
                                 }
                             });
                             parsed.semesters = newSemesters;
-                            console.log('Regenerated semesters from startSemester:', {
-                                semesterCount: parsed.semesters.length,
-                                semesterIds: parsed.semesters.map(s => s.id),
-                                includeSummer: includeSummer
-                            });
                         }
                     } else if (parsed.semesters.length !== 8 && parsed.semesters.length !== 12) {
                         // Fallback: detect earliest semester from existing courses
@@ -107,17 +93,7 @@ class GradPathApp {
             }
         }
         
-        // Default progress for Aisha (Freshman scenario)
-        // For Waqar (transfer student), uncomment transferCredits below
         const semesters = generateSemesters(2025, "Fall");
-        
-        // Pre-populate Fall 2025 with completed courses
-        const fall2025 = semesters.find(s => s.id === "Fall2025");
-        if (fall2025) {
-            //fall2025.courses = ["CS111", "MATH180"];
-            //fall2025.credits = 7;
-            // fall2025.status = "completed"; // Removed - no semesters marked as completed
-        }
         
         // Set Spring 2026 as current
         const spring2026 = semesters.find(s => s.id === "Spring2026");
@@ -125,25 +101,30 @@ class GradPathApp {
             spring2026.status = "current";
         }
         
+        // Calculate initial total credits and academic standing
+        const initialTotalCredits = semesters.reduce((sum, semester) => {
+            return sum + (semester.credits || 0);
+        }, 0);
+        
+        // Calculate initial academic standing based on credits
+        let initialStanding = "Freshman";
+        if (initialTotalCredits >= 90) {
+            initialStanding = "Senior";
+        } else if (initialTotalCredits >= 60) {
+            initialStanding = "Junior";
+        } else if (initialTotalCredits >= 30) {
+            initialStanding = "Sophomore";
+        }
+        
         return {
             userId: "aisha_rahman",
-            year: "Freshman",
+            year: initialStanding,
             major: "Computer Science",
             currentSemester: "Spring2026",
             semesters: semesters,
             startSemester: { term: "Fall", year: 2025, includeSummer: false },
-            transferCredits: [
-                // Uncomment for transfer student scenario:
-                // {
-                //     id: "transfer1",
-                //     externalCourse: "Intro to Algorithms",
-                //     uicEquivalent: "CS251",
-                //     status: "approved",
-                //     credits: 3,
-                //     mapped: false
-                // }
-            ],
-            totalCredits: 0,
+            transferCredits: [],
+            totalCredits: initialTotalCredits,
             projectedGraduation: "Spring2029"
         };
     }
@@ -181,15 +162,33 @@ class GradPathApp {
         localStorage.setItem('gradPathProgress', JSON.stringify(this.userProgress));
     }
 
+    // Calculate academic standing based on total credits
+    calculateAcademicStanding(totalCredits) {
+        if (totalCredits >= 90) {
+            return "Senior";
+        } else if (totalCredits >= 60) {
+            return "Junior";
+        } else if (totalCredits >= 30) {
+            return "Sophomore";
+        } else {
+            return "Freshman";
+        }
+    }
+
+    // Update academic standing display
+    updateAcademicStanding() {
+        const totalCredits = this.userProgress.totalCredits || 0;
+        const standing = this.calculateAcademicStanding(totalCredits);
+        this.userProgress.year = standing;
+        
+        const yearDisplay = document.getElementById('userYear');
+        if (yearDisplay) {
+            yearDisplay.textContent = standing;
+        }
+    }
+
     // Setup event listeners
     setupEventListeners() {
-        // Year selector
-        document.getElementById('userYear').addEventListener('change', (e) => {
-            this.userProgress.year = e.target.value;
-            this.saveUserProgress();
-            this.updateProgress();
-        });
-
         // Course search
         document.getElementById('courseSearch').addEventListener('input', (e) => {
             this.filterAvailableCourses(e.target.value);
@@ -198,6 +197,11 @@ class GradPathApp {
         // Category filter
         document.getElementById('categoryFilter').addEventListener('change', (e) => {
             this.filterAvailableCourses(document.getElementById('courseSearch').value, e.target.value);
+        });
+
+        // Add semester button
+        document.getElementById('addSemesterBtn').addEventListener('click', () => {
+            this.addSemester();
         });
 
         // Transfer credit modal
@@ -259,6 +263,18 @@ class GradPathApp {
                 this.closeImportModal();
             }
         });
+
+        // Prerequisite modal close handlers
+        document.getElementById('closePrerequisiteModal')?.addEventListener('click', () => {
+            this.closePrerequisiteModal();
+        });
+
+        // Close prerequisite modal on outside click
+        document.getElementById('prerequisiteModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'prerequisiteModal') {
+                this.closePrerequisiteModal();
+            }
+        });
     }
 
     // Render roadmap with semesters
@@ -266,21 +282,8 @@ class GradPathApp {
         const roadmapContainer = document.getElementById('roadmap');
         roadmapContainer.innerHTML = '';
 
-        console.log('Rendering roadmap with semesters:', {
-            totalSemesters: this.userProgress.semesters.length,
-            semesterIds: this.userProgress.semesters.map(s => s.id)
-        });
-
         this.userProgress.semesters.forEach((semester, index) => {
             try {
-                console.log(`Creating semester card ${index + 1}/${this.userProgress.semesters.length}:`, {
-                    id: semester.id,
-                    term: semester.term,
-                    year: semester.year,
-                    courses: semester.courses.length,
-                    credits: semester.credits,
-                    status: semester.status
-                });
                 const semesterCard = this.createSemesterCard(semester);
                 roadmapContainer.appendChild(semesterCard);
             } catch (error) {
@@ -304,7 +307,6 @@ class GradPathApp {
 
         // Verify all semesters were added to DOM
         const renderedSemesters = roadmapContainer.querySelectorAll('.semester-card');
-        console.log('Semesters rendered in DOM:', renderedSemesters.length, 'Expected:', this.userProgress.semesters.length);
         if (renderedSemesters.length !== this.userProgress.semesters.length) {
             console.error('MISMATCH: Not all semesters were rendered!');
         }
@@ -320,10 +322,43 @@ class GradPathApp {
 
         const header = document.createElement('div');
         header.className = 'semester-header';
-        header.innerHTML = `
-            <span class="semester-title">${semester.term} ${semester.year}</span>
-            <span class="semester-credits">${semester.credits} credits</span>
-        `;
+        
+        const headerLeft = document.createElement('div');
+        headerLeft.style.display = 'flex';
+        headerLeft.style.flexDirection = 'column';
+        headerLeft.style.gap = '4px';
+        
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'semester-title';
+        titleSpan.textContent = `${semester.term} ${semester.year}`;
+        
+        const creditsSpan = document.createElement('span');
+        creditsSpan.className = 'semester-credits';
+        creditsSpan.textContent = `${semester.credits} credits`;
+        
+        headerLeft.appendChild(titleSpan);
+        headerLeft.appendChild(creditsSpan);
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'btn-remove-semester';
+        removeBtn.innerHTML = '×';
+        removeBtn.title = 'Remove this semester';
+        removeBtn.style.cssText = 'background: transparent; border: none; font-size: 24px; color: #666; cursor: pointer; padding: 0; width: 24px; height: 24px; line-height: 1; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;';
+        removeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.removeSemester(semester.id);
+        });
+        removeBtn.addEventListener('mouseenter', () => {
+            removeBtn.style.background = '#ffebee';
+            removeBtn.style.color = '#c62828';
+        });
+        removeBtn.addEventListener('mouseleave', () => {
+            removeBtn.style.background = 'transparent';
+            removeBtn.style.color = '#666';
+        });
+        
+        header.appendChild(headerLeft);
+        header.appendChild(removeBtn);
 
         const coursesContainer = document.createElement('div');
         coursesContainer.className = 'semester-courses';
@@ -364,7 +399,6 @@ class GradPathApp {
         const handleDrop = (e) => {
             e.preventDefault();
             e.stopPropagation();
-            console.log('Drop handler called on semester:', semester.id);
             this.handleDrop(e, semester);
         };
         
@@ -408,14 +442,28 @@ class GradPathApp {
             // Removed completedCourses check - no courses marked as completed
 
             const prerequisites = course.prerequisites || [];
+            const concurrentPrerequisites = course.concurrentPrerequisites || [];
+            const hasPrereqs = prerequisites.length > 0 || concurrentPrerequisites.length > 0;
+            
             element.innerHTML = `
                 <div class="course-code">${course.code}</div>
                 <div class="course-name">${course.name}</div>
                 <div class="course-meta">
                     <span>${course.credits} credits</span>
-                    ${prerequisites.length > 0 ? `<span class="prerequisite-badge">Prereq</span>` : ''}
+                    ${hasPrereqs ? `<span class="prerequisite-badge" data-course-id="${course.id}">Prereq</span>` : ''}
                 </div>
             `;
+
+            // Add click handler for prerequisite badge
+            if (hasPrereqs) {
+                const prereqBadge = element.querySelector('.prerequisite-badge');
+                if (prereqBadge) {
+                    prereqBadge.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.showPrerequisiteDetails(course.id);
+                    });
+                }
+            }
 
             element.addEventListener('dragstart', (e) => this.handleDragStart(e, course.id, 'semester'));
             element.addEventListener('dragend', (e) => this.handleDragEnd(e));
@@ -441,26 +489,14 @@ class GradPathApp {
 
         // Check if specific courses exist in catalog
         const specificCourses = ['MATH181', 'MATH210', 'ENGL160', 'ENGL161'];
-        console.log('Checking for specific courses in catalog:');
         specificCourses.forEach(courseId => {
             const exists = courseCatalog[courseId];
-            console.log(`  ${courseId}: ${exists ? 'EXISTS' : 'NOT FOUND'}`, exists ? {
-                code: exists.code,
-                category: exists.category,
-                prerequisites: exists.prerequisites
-            } : '');
         });
 
-        console.log('Rendering available courses:', {
-            totalCourses: allCourses.length,
-            scheduledCourses: scheduledCourses.length,
-            scheduledCourseIds: scheduledCourses
-        });
 
         allCourses.forEach(course => {
             // Don't show courses that are already scheduled
             if (scheduledCourses.includes(course.id)) {
-                console.log(`Skipping ${course.code} - already scheduled`);
                 return;
             }
 
@@ -468,7 +504,6 @@ class GradPathApp {
             // We keep math electives visible even after 3 credits are selected, so users can see options
             // The validation will prevent adding more than 3 credits total
             if (this.shouldHideCourse(course.id)) {
-                console.log(`Skipping ${course.code} - math elective limit reached (3 credits)`);
                 return;
             }
 
@@ -476,14 +511,108 @@ class GradPathApp {
             const canTake = this.canTakeCourse(course.id);
             const courseCard = this.createAvailableCourseCard(course, canTake);
             container.appendChild(courseCard);
-            console.log(`Added ${course.code} to available courses (category: ${course.category}, canTake: ${canTake})`);
         });
         
         // Apply current filter after rendering
         const currentSearch = document.getElementById('courseSearch')?.value || '';
         const currentCategory = document.getElementById('categoryFilter')?.value || 'all';
-        console.log('Applying filter:', { search: currentSearch, category: currentCategory });
         this.filterAvailableCourses(currentSearch, currentCategory);
+        
+        // Set up drag and drop handlers for the available courses container
+        this.setupAvailableCoursesDropZone(container);
+    }
+    
+    // Set up drop zone for available courses panel (allows dragging courses back from semesters)
+    setupAvailableCoursesDropZone(container) {
+        // Remove existing handlers if any by cloning without handlers
+        if (container.dataset.dropZoneSetup) {
+            return; // Already set up
+        }
+        container.dataset.dropZoneSetup = 'true';
+        
+        // Handle drag over - allow dropping
+        const handleDragOver = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Only allow drops from semester courses (not from available courses panel)
+            if (this.dragSource === 'semester') {
+                e.dataTransfer.dropEffect = 'move';
+                container.classList.add('valid-drop-available');
+            } else {
+                e.dataTransfer.dropEffect = 'none';
+                container.classList.remove('valid-drop-available');
+            }
+        };
+        
+        // Handle drop - remove course from semester
+        const handleDrop = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Only process if dragging from a semester
+            if (this.dragSource !== 'semester') {
+                container.classList.remove('valid-drop-available');
+                return;
+            }
+            
+            // Get course ID
+            let courseId = null;
+            try {
+                const jsonData = e.dataTransfer.getData('application/json');
+                if (jsonData) {
+                    const data = JSON.parse(jsonData);
+                    courseId = data.courseId;
+                }
+            } catch (err) {
+            }
+            
+            if (!courseId) {
+                courseId = e.dataTransfer.getData('text/plain');
+            }
+            
+            if (!courseId && this.currentDragElement) {
+                courseId = this.currentDragElement.dataset.courseId;
+            }
+            
+            if (!courseId) {
+                const draggedCard = document.querySelector('.semester-course.dragging');
+                if (draggedCard) {
+                    courseId = draggedCard.dataset.courseId;
+                }
+            }
+            
+            if (!courseId) {
+                console.error('No course ID found in drop event');
+                container.classList.remove('valid-drop-available');
+                return;
+            }
+            
+            // Remove course from semester
+            this.removeCourseFromSemester(courseId);
+            this.saveUserProgress();
+            const courseCode = courseCatalog[courseId]?.code || courseId;
+            this.showFeedback('success', `Removed ${courseCode} from roadmap`);
+            
+            // Update UI
+            container.classList.remove('valid-drop-available');
+            this.renderRoadmap();
+            this.renderAvailableCourses();
+            this.updateProgress();
+        };
+        
+        // Handle drag leave
+        const handleDragLeave = (e) => {
+            // Only remove highlight if we're actually leaving the container
+            if (!container.contains(e.relatedTarget)) {
+                container.classList.remove('valid-drop-available');
+            }
+        };
+        
+        // Attach handlers
+        container.addEventListener('dragover', handleDragOver);
+        container.addEventListener('drop', handleDrop);
+        container.addEventListener('dragleave', handleDragLeave);
     }
 
     // Create course card for available courses panel
@@ -519,10 +648,26 @@ class GradPathApp {
         card.appendChild(nameDiv);
         card.appendChild(metaDiv);
         
-        // Add prerequisite info if needed
+        // Add prerequisite badge if course has prerequisites
         const prerequisites = course.prerequisites || [];
         const concurrentPrerequisites = course.concurrentPrerequisites || [];
-        if (!canTake && (prerequisites.length > 0 || concurrentPrerequisites.length > 0)) {
+        const hasPrereqs = prerequisites.length > 0 || concurrentPrerequisites.length > 0;
+        
+        if (hasPrereqs) {
+            const prereqBadge = document.createElement('span');
+            prereqBadge.className = 'prerequisite-badge';
+            prereqBadge.textContent = 'Prereq';
+            prereqBadge.dataset.courseId = course.id;
+            prereqBadge.style.marginLeft = '8px';
+            prereqBadge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showPrerequisiteDetails(course.id);
+            });
+            metaDiv.appendChild(prereqBadge);
+        }
+        
+        // Add prerequisite info if needed (for blocked courses)
+        if (!canTake && hasPrereqs) {
             const prereqDiv = document.createElement('div');
             prereqDiv.style.cssText = 'font-size: 0.8em; color: var(--color-error); margin-top: 5px;';
             let prereqText = '';
@@ -539,14 +684,12 @@ class GradPathApp {
 
         // Add drag handlers for all courses
         card.addEventListener('dragstart', (e) => {
-            console.log('Drag start for:', course.id, 'draggable:', card.draggable, 'card element:', card);
             e.stopPropagation();
             // Make sure we're passing the card element, not the event target
             this.handleDragStart(e, course.id, 'available');
         }, true); // Use capture phase to ensure it fires
         
         card.addEventListener('dragend', (e) => {
-            console.log('Drag end for:', course.id);
             e.stopPropagation();
             this.handleDragEnd(e);
         });
@@ -594,13 +737,6 @@ class GradPathApp {
         });
 
         const result = prereqsSatisfied && concurrentPrereqsSatisfied;
-        console.log(`canTakeCourse(${courseId}):`, {
-            prerequisites,
-            prereqsSatisfied,
-            concurrentPrerequisites,
-            concurrentPrereqsSatisfied,
-            result
-        });
         return result;
     }
 
@@ -675,13 +811,6 @@ class GradPathApp {
             }
         });
         
-        console.log(`getCSElectiveCourseCount(exclude: ${excludeCourseId}):`, {
-            count,
-            csElectives: csElectives.filter(id => {
-                if (excludeCourseId && id === excludeCourseId) return false;
-                return scheduledCourses.includes(id);
-            })
-        });
         
         return count;
     }
@@ -704,13 +833,6 @@ class GradPathApp {
             }
         });
         
-        console.log(`getScienceElectiveCourseCount(exclude: ${excludeCourseId}):`, {
-            count,
-            scienceElectives: scienceElectives.filter(id => {
-                if (excludeCourseId && id === excludeCourseId) return false;
-                return scheduledCourses.includes(id);
-            })
-        });
         
         return count;
     }
@@ -748,10 +870,6 @@ class GradPathApp {
             }
         });
         
-        console.log(`getMathElectiveCredits(exclude: ${excludeCourseId}):`, {
-            totalCredits,
-            foundCourses: foundCourses.map(f => `${f.code} (${f.credits})`).join(', ')
-        });
         
         return totalCredits;
     }
@@ -790,17 +908,6 @@ class GradPathApp {
             }
         });
         
-        console.log(`getMathElectiveCourseCount(exclude: ${excludeCourseId}):`, {
-            count,
-            mathElectives: mathElectives.filter(id => {
-                if (excludeCourseId && id === excludeCourseId) return false;
-                return scheduledCourses.includes(id);
-            }),
-            requiredStats: requiredStats.filter(id => {
-                if (excludeCourseId && id === excludeCourseId) return false;
-                return scheduledCourses.includes(id);
-            })
-        });
         
         return count;
     }
@@ -820,11 +927,9 @@ class GradPathApp {
         if (isMathElective || isRequiredStat) {
             // Get current count of math elective courses (including required stats)
             const currentCourseCount = this.getMathElectiveCourseCount();
-            console.log(`shouldHideCourse(${course.code}): currentCourseCount = ${currentCourseCount}, maxCourses = 3`);
             
             // Hide math electives and required stats if 3 courses are already selected
             if (currentCourseCount >= 3) {
-                console.log(`Hiding ${course.code} because 3 math elective courses (including required statistics) are already selected`);
                 return true;
             }
         }
@@ -839,7 +944,6 @@ class GradPathApp {
                 );
             
             if (hasOtherRequiredStat) {
-                console.log(`Hiding ${course.code} because the other required statistics course is already selected`);
                 return true;
             }
         }
@@ -849,11 +953,9 @@ class GradPathApp {
         if (scienceElectives.includes(courseId)) {
             // Get current count of science elective courses
             const currentCourseCount = this.getScienceElectiveCourseCount();
-            console.log(`shouldHideCourse(${course.code}): currentCourseCount = ${currentCourseCount}, maxCourses = 2`);
             
             // Hide science electives if 2 courses are already selected
             if (currentCourseCount >= 2) {
-                console.log(`Hiding ${course.code} because 2 science elective courses are already selected`);
                 return true;
             }
         }
@@ -863,11 +965,9 @@ class GradPathApp {
         if (csElectives.includes(courseId)) {
             // Get current count of CS elective courses
             const currentCourseCount = this.getCSElectiveCourseCount();
-            console.log(`shouldHideCourse(${course.code}): currentCourseCount = ${currentCourseCount}, maxCourses = 6`);
             
             // Hide CS electives if 6 courses are already selected
             if (currentCourseCount >= 6) {
-                console.log(`Hiding ${course.code} because 6 CS elective courses are already selected`);
                 return true;
             }
         }
@@ -878,7 +978,6 @@ class GradPathApp {
             const genEdMappings = this.userProgress.genEdMappings || {};
             // Hide placeholder if it has been mapped to an actual course
             if (genEdMappings[courseId]) {
-                console.log(`Hiding ${course.code} because gen ed requirement has been fulfilled with ${genEdMappings[courseId]}`);
                 return true;
             }
         }
@@ -886,39 +985,26 @@ class GradPathApp {
         // Check if this is a free elective placeholder
         const freeElectivePlaceholders = ['FREE001', 'FREE002', 'FREE003'];
         if (freeElectivePlaceholders.includes(courseId)) {
-            const graduationRequirement = 128;
-            const totalCredits = this.userProgress.totalCredits || 0;
-            const remainingCredits = graduationRequirement - totalCredits;
-            
-            // If graduation requirement is already met, hide all free elective placeholders
-            if (remainingCredits <= 0) {
-                console.log(`Hiding ${course.code} because graduation requirement (128 credits) is already met`);
-                return true;
-            }
-            
-            // Calculate how many free elective credits are needed (max 9 credits = 3 courses)
-            const freeElectiveCreditsNeeded = Math.min(remainingCredits, 9);
-            const freeElectiveCoursesNeeded = Math.ceil(freeElectiveCreditsNeeded / 3); // Each placeholder is 3 credits
-            
-            // Count how many free elective placeholders are currently scheduled
             const scheduledCourses = this.getAllScheduledCourses();
-            const scheduledFreeElectives = freeElectivePlaceholders.filter(id => scheduledCourses.includes(id));
-            const scheduledFreeElectiveCount = scheduledFreeElectives.length;
+            const isAlreadyScheduled = scheduledCourses.includes(courseId);
             
-            // Get the index of this placeholder (0, 1, or 2)
-            const placeholderIndex = freeElectivePlaceholders.indexOf(courseId);
-            
-            // Hide if we already have enough free electives scheduled
-            if (scheduledFreeElectiveCount >= freeElectiveCoursesNeeded) {
-                console.log(`Hiding ${course.code} because ${scheduledFreeElectiveCount} free elective(s) are already scheduled (need ${freeElectiveCoursesNeeded})`);
+            // Hide if this specific free elective is already scheduled
+            if (isAlreadyScheduled) {
                 return true;
             }
             
-            // Hide if this specific placeholder index is beyond what's needed
-            if (placeholderIndex >= freeElectiveCoursesNeeded) {
-                console.log(`Hiding ${course.code} because only ${freeElectiveCoursesNeeded} free elective(s) are needed (this is placeholder ${placeholderIndex + 1})`);
+            // Calculate total credits dynamically to check if graduation requirement is met
+            const graduationRequirement = 128;
+            const totalCredits = this.userProgress.semesters.reduce((sum, semester) => {
+                return sum + (semester.credits || 0);
+            }, 0);
+            
+            // Hide free electives if graduation requirement (128 credits) is already met or exceeded
+            if (totalCredits >= graduationRequirement) {
                 return true;
             }
+            
+            // Otherwise, show free electives if we still need credits to reach 128
         }
         
         return false;
@@ -926,7 +1012,6 @@ class GradPathApp {
 
     // Drag and drop handlers
     handleDragStart(e, courseId, source) {
-        console.log('handleDragStart called:', courseId, 'target:', e.target);
         // Store reference to the card element, not just the target (which might be a child)
         this.currentDragElement = e.target.closest('.course-card, .semester-course') || e.target;
         this.dragSource = source;
@@ -942,12 +1027,6 @@ class GradPathApp {
         e.dataTransfer.setData('text/plain', courseId);
         e.dataTransfer.setData('application/json', JSON.stringify({ courseId, source }));
         
-        console.log('Drag data set:', {
-            courseId,
-            storedCourseId: this.currentDragCourseId,
-            element: this.currentDragElement,
-            dataset: this.currentDragElement.dataset.courseId
-        });
     }
 
     handleDragOver(e, semester) {
@@ -962,14 +1041,12 @@ class GradPathApp {
         // First try to get from stored course ID (most reliable)
         if (this.currentDragCourseId) {
             courseId = this.currentDragCourseId;
-            console.log('DragOver: Course ID from currentDragCourseId:', courseId);
         }
         
         // If not found, try to get from currentDragElement (stored in dragstart)
         if (!courseId && this.currentDragElement) {
             courseId = this.currentDragElement.dataset.courseId;
             if (courseId) {
-                console.log('DragOver: Course ID from currentDragElement:', courseId);
             }
         }
         
@@ -979,7 +1056,6 @@ class GradPathApp {
             if (draggingElement) {
                 courseId = draggingElement.dataset.courseId;
                 if (courseId) {
-                    console.log('DragOver: Course ID from dragging element:', courseId);
                 }
             }
         }
@@ -1005,9 +1081,7 @@ class GradPathApp {
             return;
         }
         
-        console.log('DragOver: Validating', courseId, '->', semesterId);
         const validation = this.validateCoursePlacement(courseId, semesterId);
-        console.log('DragOver: Validation result', validation);
 
         const semesterCard = e.currentTarget;
         if (semesterCard) {
@@ -1015,10 +1089,8 @@ class GradPathApp {
 
             if (validation.valid) {
                 semesterCard.classList.add('valid-drop');
-                console.log('DragOver: Valid drop zone');
             } else {
                 semesterCard.classList.add('invalid-drop');
-                console.log('DragOver: Invalid drop zone:', validation.reason);
             }
         }
     }
@@ -1027,7 +1099,6 @@ class GradPathApp {
         e.preventDefault();
         e.stopPropagation();
         
-        console.log('Drop event triggered', { semester: semester?.id, target: e.currentTarget });
         
         // Get course ID from dataTransfer - try JSON first, then text
         let courseId = null;
@@ -1036,20 +1107,16 @@ class GradPathApp {
             if (jsonData) {
                 const data = JSON.parse(jsonData);
                 courseId = data.courseId;
-                console.log('Course ID from JSON:', courseId);
             }
         } catch (err) {
-            console.log('Could not parse JSON data:', err);
         }
         
         if (!courseId) {
             courseId = e.dataTransfer.getData('text/plain');
-            console.log('Course ID from text/plain:', courseId);
         }
         
         if (!courseId && this.currentDragElement) {
             courseId = this.currentDragElement.dataset.courseId;
-            console.log('Course ID from currentDragElement:', courseId);
         }
         
         // Also try getting from dataset if still not found
@@ -1057,7 +1124,6 @@ class GradPathApp {
             const draggedCard = document.querySelector('.course-card.dragging, .semester-course.dragging');
             if (draggedCard) {
                 courseId = draggedCard.dataset.courseId;
-                console.log('Course ID from dragging element:', courseId);
             }
         }
         
@@ -1069,7 +1135,6 @@ class GradPathApp {
         
         // Get semester ID from parameter or dataset
         const semesterId = semester?.id || e.currentTarget?.dataset?.semesterId;
-        console.log('Semester ID:', semesterId);
         
         if (!semesterId) {
             console.error('No semester ID found');
@@ -1077,9 +1142,7 @@ class GradPathApp {
             return;
         }
         
-        console.log('Validating placement:', courseId, '->', semesterId);
         const validation = this.validateCoursePlacement(courseId, semesterId);
-        console.log('Validation result:', validation);
 
         // DOUBLE-CHECK: Ensure validation actually prevents the course from being added
         if (!validation.valid) {
@@ -1093,7 +1156,6 @@ class GradPathApp {
         }
 
         // Only add course if validation passed
-        console.log('Validation passed - adding course to semester');
         this.addCourseToSemester(courseId, semesterId);
         this.showFeedback('success', validation.message || 'Course added successfully!');
 
@@ -1111,7 +1173,6 @@ class GradPathApp {
     }
 
     handleDragEnd(e) {
-        console.log('Drag end event');
         // Remove dragging class from all elements (in case target changed)
         document.querySelectorAll('.course-card.dragging, .semester-course.dragging').forEach(el => {
             el.classList.remove('dragging');
@@ -1162,15 +1223,6 @@ class GradPathApp {
             // If adding a new course (not moving), check if adding it would exceed the limit
             const wouldExceedLimit = !isAlreadyScheduled && currentCourseCount >= 3;
             
-            console.log(`Math elective validation for ${course.code}:`, {
-                courseId,
-                isAlreadyScheduled,
-                currentCourseCount,
-                wouldExceedLimit,
-                maxCourses: 3,
-                isRequiredStat: requiredStats.includes(courseId),
-                isMathElective: mathElectives.includes(courseId)
-            });
             
             // Check if adding this course would exceed 3 math elective courses total
             // Allow up to 3 courses total (including required statistics)
@@ -1216,12 +1268,6 @@ class GradPathApp {
             const isAlreadyScheduled = scheduledCourses.includes(courseId);
             const currentCourseCount = this.getScienceElectiveCourseCount(isAlreadyScheduled ? courseId : null);
             
-            console.log(`Science elective validation for ${course.code}:`, {
-                courseId,
-                isAlreadyScheduled,
-                currentCourseCount,
-                maxCourses: 2
-            });
             
             // Check if adding this course would exceed 2 science elective courses total
             // Allow up to 2 courses total
@@ -1244,12 +1290,6 @@ class GradPathApp {
             const isAlreadyScheduled = scheduledCourses.includes(courseId);
             const currentCourseCount = this.getCSElectiveCourseCount(isAlreadyScheduled ? courseId : null);
             
-            console.log(`CS elective validation for ${course.code}:`, {
-                courseId,
-                isAlreadyScheduled,
-                currentCourseCount,
-                maxCourses: 6
-            });
             
             // Check if adding this course would exceed 6 CS elective courses total
             // Allow up to 6 courses total
@@ -1431,6 +1471,9 @@ class GradPathApp {
         }, 0);
         this.userProgress.totalCredits = totalCredits;
 
+        // Update academic standing based on credits
+        this.updateAcademicStanding();
+
         // Update progress bar
         const percentage = Math.min((totalCredits / 128) * 100, 100);
         const progressFill = document.getElementById('progressFill');
@@ -1444,6 +1487,10 @@ class GradPathApp {
 
         // Update credits display
         document.getElementById('totalCredits').textContent = totalCredits;
+
+        // Re-render available courses to update free elective visibility based on credit count
+        // This ensures free electives are hidden/shown based on current credit total
+        this.renderAvailableCourses();
 
         // Show encouraging messages
         this.showProgressMessage(percentage);
@@ -1605,7 +1652,10 @@ class GradPathApp {
         const container = document.getElementById('availableCourses');
         const courses = Array.from(container.children);
 
-        console.log('Filtering courses:', { searchTerm, category, totalCourses: courses.length });
+
+        // Get CS electives list for category matching
+        const csElectives = this.getCSElectives();
+        const freeElectivePlaceholders = ['FREE001', 'FREE002', 'FREE003'];
 
         courses.forEach(course => {
             const courseId = course.dataset.courseId;
@@ -1619,17 +1669,23 @@ class GradPathApp {
                 courseData.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 courseData.name.toLowerCase().includes(searchTerm.toLowerCase());
 
-            const matchesCategory = category === 'all' || courseData.category === category;
+            let matchesCategory = false;
+            if (category === 'all') {
+                matchesCategory = true;
+            } else if (category === 'csTechElective') {
+                // Check if it's a CS tech elective
+                matchesCategory = csElectives.includes(courseId);
+            } else if (category === 'freeElective') {
+                // Check if it's a free elective
+                matchesCategory = freeElectivePlaceholders.includes(courseId);
+            } else {
+                // For other categories, use the standard category field
+                matchesCategory = courseData.category === category;
+            }
 
             const shouldShow = matchesSearch && matchesCategory;
             course.style.display = shouldShow ? 'block' : 'none';
             
-            console.log(`Course ${courseData.code}:`, {
-                category: courseData.category,
-                matchesCategory,
-                matchesSearch,
-                shouldShow
-            });
         });
     }
 
@@ -1786,7 +1842,6 @@ class GradPathApp {
                                 };
                                 const category = genEdCategoryMap[reqName];
                                 genEdCoursesByCategory[category].push(courseData);
-                                console.log(`Found gen ed course: ${normalizedCode} (${category}) in ${semesterId}`);
                             }
                         });
                     });
@@ -1795,7 +1850,6 @@ class GradPathApp {
 
             // Store gen ed mapping for later use
             this.genEdCoursesByCategory = genEdCoursesByCategory;
-            console.log('Gen Ed courses by category:', genEdCoursesByCategory);
 
             // Parse math electives from the audit
             const mathElectiveCourses = new Set();
@@ -1818,7 +1872,6 @@ class GradPathApp {
                             
                             const normalizedCode = courseCode.replace(/\s+/g, '');
                             mathElectiveCourses.add(normalizedCode);
-                            console.log(`Found math elective from audit: ${normalizedCode}`);
                         }
                     });
                 });
@@ -1826,7 +1879,6 @@ class GradPathApp {
             
             // Store math electives found in audit for later use
             this.mathElectivesFromAudit = Array.from(mathElectiveCourses);
-            console.log('Math electives found in audit:', this.mathElectivesFromAudit);
 
             // First, identify courses that don't apply toward the degree
             const excludedCourses = new Set();
@@ -1853,7 +1905,6 @@ class GradPathApp {
                     // Find the parent requirement element
                     const requirement = header.closest('.requirement');
                     if (requirement) {
-                        console.log(`Found exclusion requirement section: "${headerText.substring(0, 100)}"`);
                         // Find all course tables in this requirement and all subrequirements
                         const excludedTables = requirement.querySelectorAll('table.completedCourses');
                         excludedTables.forEach(table => {
@@ -1870,7 +1921,6 @@ class GradPathApp {
                                     }
                                     const normalizedCode = courseCode.replace(/\s+/g, '');
                                     excludedCourses.add(normalizedCode);
-                                    console.log(`Excluding course that doesn't apply: ${normalizedCode} (from section: "${headerText.substring(0, 50)}")`);
                                 }
                             });
                         });
@@ -1883,7 +1933,6 @@ class GradPathApp {
             exclusionReqNames.forEach(reqName => {
                 const requirement = doc.querySelector(`.requirement[rname="${reqName}"]`);
                 if (requirement) {
-                    console.log(`Found exclusion requirement by name: ${reqName}`);
                     const excludedTables = requirement.querySelectorAll('table.completedCourses');
                     excludedTables.forEach(table => {
                         const courseRows = table.querySelectorAll('tr.takenCourse');
@@ -1899,7 +1948,6 @@ class GradPathApp {
                                 }
                                 const normalizedCode = courseCode.replace(/\s+/g, '');
                                 excludedCourses.add(normalizedCode);
-                                console.log(`Excluding course from ${reqName} section: ${normalizedCode}`);
                             }
                         });
                     });
@@ -1911,10 +1959,8 @@ class GradPathApp {
             specialExclusionCodes.forEach(code => {
                 const normalizedCode = code.replace(/\s+/g, '');
                 excludedCourses.add(normalizedCode);
-                console.log(`Excluding special course code: ${normalizedCode}`);
             });
             
-            console.log(`Found ${excludedCourses.size} courses to exclude:`, Array.from(excludedCourses));
 
             // Find all course tables
             const courseTables = doc.querySelectorAll('table.completedCourses');
@@ -1942,7 +1988,6 @@ class GradPathApp {
 
                         // Skip courses with "W" grade (withdrawn)
                         if (grade.toUpperCase() === 'W' || grade.toUpperCase().startsWith('W')) {
-                            console.log(`Skipping withdrawn course: ${courseCode} (Grade: ${grade})`);
                             return;
                         }
 
@@ -1966,7 +2011,6 @@ class GradPathApp {
 
                         // Skip courses that don't apply toward the degree
                         if (excludedCourses.has(normalizedCourseCode)) {
-                            console.log(`Skipping course that doesn't apply: ${courseCode} (normalized: ${normalizedCourseCode})`);
                             return;
                         }
                         
@@ -1979,7 +2023,6 @@ class GradPathApp {
                             upperCourseCode.includes('NONBACC') ||
                             upperCourseCode === 'NO TRANSFER' ||
                             upperCourseCode === 'NOTRANSFER') {
-                            console.log(`Skipping special exclusion course code: ${courseCode}`);
                             return;
                         }
 
@@ -2011,12 +2054,9 @@ class GradPathApp {
 
             // Store parsed data for preview
             this.pendingImport = coursesBySemester;
-            console.log('Parsed semesters from audit:', Object.keys(coursesBySemester));
-            console.log('Courses by semester:', coursesBySemester);
             
             // Debug: Check specifically for Spring 2023
             if (coursesBySemester['Spring2023']) {
-                console.log('Spring2023 courses found:', coursesBySemester['Spring2023']);
             } else {
                 console.warn('Spring2023 NOT found in parsed courses. Available semesters:', Object.keys(coursesBySemester));
             }
@@ -2242,7 +2282,6 @@ class GradPathApp {
                     
                     // Add imported courses for this semester
                     if (this.pendingImport[sem.id]) {
-                        console.log(`Adding courses to ${sem.id}:`, this.pendingImport[sem.id].map(c => c.code));
                         this.pendingImport[sem.id].forEach(course => {
                             // Check if course exists in catalog, if not, try to add it
                             if (!courseCatalog[course.code]) {
@@ -2254,9 +2293,7 @@ class GradPathApp {
                                 if (!sem.courses.includes(course.code)) {
                                     sem.courses.push(course.code);
                                     sem.credits += course.credits;
-                                    console.log(`Added ${course.code} to ${sem.id}`);
                                 } else {
-                                    console.log(`Course ${course.code} already in ${sem.id}`);
                                 }
                             } else {
                                 console.warn(`Course ${course.code} not found in catalog, skipping`);
@@ -2280,18 +2317,15 @@ class GradPathApp {
                                         category: category,
                                         description: isMathElective ? `Math elective course - ${course.name}` : `General education course - ${course.name}`
                                     };
-                                    console.log(`Auto-added ${course.code} to catalog: ${course.name} (category: ${category})`);
                                     // Now add it to the semester
                                     if (!sem.courses.includes(course.code)) {
                                         sem.courses.push(course.code);
                                         sem.credits += course.credits;
-                                        console.log(`Added ${course.code} to ${sem.id} after auto-adding to catalog`);
                                     }
                                 }
                             }
                         });
                     } else {
-                        console.log(`No courses found in pendingImport for ${sem.id}`);
                     }
                 });
                 
@@ -2327,23 +2361,16 @@ class GradPathApp {
                     }
                     return shouldKeep;
                 });
-                console.log('Filtered semesters (removed empty ones, but kept current):', {
-                    before: newSemesters.map(s => `${s.id} (${s.courses.length} courses, ${s.status})`),
-                    after: semestersWithCourses.map(s => `${s.id} (${s.courses.length} courses, ${s.status})`)
-                });
                 
                 // Debug: Check if Spring2023 is in the filtered list
                 const spring2023InFiltered = semestersWithCourses.find(s => s.id === 'Spring2023');
                 if (spring2023InFiltered) {
-                    console.log('Spring2023 is in filtered semesters:', spring2023InFiltered);
                 } else {
                     console.error('Spring2023 is MISSING from filtered semesters!');
-                    console.log('All filtered semesters:', semestersWithCourses.map(s => s.id));
                 }
                 
                 // Update user progress with semesters that have courses or are current
                 this.userProgress.semesters = semestersWithCourses;
-                console.log('Updated userProgress.semesters:', semestersWithCourses.map(s => s.id));
                 
                 // Calculate total credits to check if graduation requirement is met
                 const totalCredits = semestersWithCourses.reduce((sum, semester) => {
@@ -2352,7 +2379,6 @@ class GradPathApp {
                 const graduationRequirement = 128;
                 const hasMetGraduationRequirement = totalCredits >= graduationRequirement;
                 
-                console.log(`Total credits: ${totalCredits}/${graduationRequirement}, hasMetGraduationRequirement: ${hasMetGraduationRequirement}`);
                 
                 // Set current semester - find the first semester that should be current
                 // If no semester is marked as current, mark the first one after the last semester with courses
@@ -2396,10 +2422,8 @@ class GradPathApp {
                                         status: "current"
                                     };
                                     semestersWithCourses.push(currentSem);
-                                    console.log(`Added future semester ${nextSemesterId} for planning (credits: ${totalCredits}/${graduationRequirement})`);
                                 }
                             } else {
-                                console.log(`Not adding future semester - graduation requirement met (${totalCredits}/${graduationRequirement} credits)`);
                             }
                         }
                     } else {
@@ -2423,7 +2447,6 @@ class GradPathApp {
                         if (lastIndex < semestersWithCourses.length - 1) {
                             const semestersToRemove = semestersWithCourses.slice(lastIndex + 1);
                             semestersToRemove.forEach(sem => {
-                                console.log(`Removing empty future semester ${sem.id} - graduation requirement met`);
                             });
                             semestersWithCourses.splice(lastIndex + 1);
                             // Update userProgress with the filtered list
@@ -2463,7 +2486,6 @@ class GradPathApp {
             const existing = new Set(this.userProgress.mathElectivesFromAudit);
             this.mathElectivesFromAudit.forEach(courseId => existing.add(courseId));
             this.userProgress.mathElectivesFromAudit = Array.from(existing);
-            console.log('Updated math electives from audit:', this.userProgress.mathElectivesFromAudit);
         }
 
         // Process general education courses - replace placeholders with actual courses
@@ -2536,12 +2558,9 @@ class GradPathApp {
         
         // STEP 1: Get ALL unique semester IDs from the audit (these are the ONLY semesters that have courses)
         const auditSemesterIds = Object.keys(coursesBySemester);
-        console.log('Semesters found in audit:', auditSemesterIds);
-        console.log('CoursesBySemester keys:', Object.keys(coursesBySemester));
         
         // Debug: Check for Spring 2023 specifically
         if (coursesBySemester['Spring2023']) {
-            console.log('Spring2023 found in coursesBySemester with', coursesBySemester['Spring2023'].length, 'courses');
         } else {
             console.warn('Spring2023 NOT in coursesBySemester! Available:', Object.keys(coursesBySemester));
         }
@@ -2567,7 +2586,6 @@ class GradPathApp {
             return aTermOrd - bTermOrd;
         });
         
-        console.log('Sorted semesters from audit:', sortedAuditSemesters);
         
         // STEP 3: Create semester objects ONLY for semesters that exist in the audit
         // DO NOT create any semesters that aren't in the audit - only show semesters where classes were taken
@@ -2588,7 +2606,6 @@ class GradPathApp {
             }
         });
         
-        console.log('Created semesters from audit (ONLY semesters with courses):', semesters.map(s => s.id));
         
         // DO NOT add any future semesters - only show semesters where classes were actually taken
         // If user wants to plan future semesters, they can add them manually
@@ -2600,6 +2617,96 @@ class GradPathApp {
         document.getElementById('importModal').classList.remove('show');
         this.pendingImport = null;
         document.getElementById('auditFileInput').value = '';
+    }
+
+    // Show prerequisite details modal
+    showPrerequisiteDetails(courseId) {
+        const course = courseCatalog[courseId];
+        if (!course) return;
+
+        const modal = document.getElementById('prerequisiteModal');
+        const titleEl = document.getElementById('prerequisiteModalTitle');
+        const contentEl = document.getElementById('prerequisiteModalContent');
+
+        titleEl.textContent = `${course.code} - ${course.name} - Prerequisites`;
+
+        const prerequisites = course.prerequisites || [];
+        const concurrentPrerequisites = course.concurrentPrerequisites || [];
+        const scheduledCourses = this.getAllScheduledCourses();
+
+        let contentHTML = '';
+
+        if (prerequisites.length > 0) {
+            contentHTML += '<div style="margin-bottom: 20px;">';
+            contentHTML += '<h3 style="margin-bottom: 10px; color: var(--color-text); font-size: 1.1em;">Prerequisites (Must Complete First):</h3>';
+            contentHTML += '<ul style="list-style: none; padding: 0; margin: 0;">';
+            
+            prerequisites.forEach(prereqId => {
+                const prereqCourse = courseCatalog[prereqId];
+                const isSatisfied = scheduledCourses.includes(prereqId);
+                const prereqSemester = this.findCourseSemester(prereqId);
+                
+                if (prereqCourse) {
+                    const statusIcon = isSatisfied ? '✓' : '✗';
+                    const statusColor = isSatisfied ? 'var(--color-success)' : 'var(--color-error)';
+                    const semesterInfo = prereqSemester ? ` (${this.userProgress.semesters.find(s => s.id === prereqSemester)?.term} ${this.userProgress.semesters.find(s => s.id === prereqSemester)?.year})` : '';
+                    
+                    contentHTML += `<li style="padding: 8px; margin: 5px 0; background: ${isSatisfied ? '#e8f5e9' : '#ffebee'}; border-radius: 4px; border-left: 3px solid ${statusColor};">`;
+                    contentHTML += `<span style="font-weight: bold; color: ${statusColor}; margin-right: 8px;">${statusIcon}</span>`;
+                    contentHTML += `<span style="font-weight: 600;">${prereqCourse.code}</span> - ${prereqCourse.name}${semesterInfo}`;
+                    contentHTML += `</li>`;
+                } else {
+                    contentHTML += `<li style="padding: 8px; margin: 5px 0; background: #ffebee; border-radius: 4px; border-left: 3px solid var(--color-error);">`;
+                    contentHTML += `<span style="font-weight: bold; color: var(--color-error); margin-right: 8px;">✗</span>`;
+                    contentHTML += `<span>${prereqId}</span> (Course not found in catalog)`;
+                    contentHTML += `</li>`;
+                }
+            });
+            
+            contentHTML += '</ul></div>';
+        }
+
+        if (concurrentPrerequisites.length > 0) {
+            contentHTML += '<div style="margin-bottom: 20px;">';
+            contentHTML += '<h3 style="margin-bottom: 10px; color: var(--color-text); font-size: 1.1em;">Concurrent Prerequisites (Can Take Together):</h3>';
+            contentHTML += '<ul style="list-style: none; padding: 0; margin: 0;">';
+            
+            concurrentPrerequisites.forEach(prereqId => {
+                const prereqCourse = courseCatalog[prereqId];
+                const isSatisfied = scheduledCourses.includes(prereqId);
+                const prereqSemester = this.findCourseSemester(prereqId);
+                
+                if (prereqCourse) {
+                    const statusIcon = isSatisfied ? '✓' : '✗';
+                    const statusColor = isSatisfied ? 'var(--color-success)' : 'var(--color-warning)';
+                    const semesterInfo = prereqSemester ? ` (${this.userProgress.semesters.find(s => s.id === prereqSemester)?.term} ${this.userProgress.semesters.find(s => s.id === prereqSemester)?.year})` : '';
+                    
+                    contentHTML += `<li style="padding: 8px; margin: 5px 0; background: ${isSatisfied ? '#e8f5e9' : '#fff3e0'}; border-radius: 4px; border-left: 3px solid ${statusColor};">`;
+                    contentHTML += `<span style="font-weight: bold; color: ${statusColor}; margin-right: 8px;">${statusIcon}</span>`;
+                    contentHTML += `<span style="font-weight: 600;">${prereqCourse.code}</span> - ${prereqCourse.name}${semesterInfo}`;
+                    contentHTML += `</li>`;
+                } else {
+                    contentHTML += `<li style="padding: 8px; margin: 5px 0; background: #fff3e0; border-radius: 4px; border-left: 3px solid var(--color-warning);">`;
+                    contentHTML += `<span style="font-weight: bold; color: var(--color-warning); margin-right: 8px;">✗</span>`;
+                    contentHTML += `<span>${prereqId}</span> (Course not found in catalog)`;
+                    contentHTML += `</li>`;
+                }
+            });
+            
+            contentHTML += '</ul></div>';
+        }
+
+        if (prerequisites.length === 0 && concurrentPrerequisites.length === 0) {
+            contentHTML = '<p style="color: var(--color-text-light);">This course has no prerequisites.</p>';
+        }
+
+        contentEl.innerHTML = contentHTML;
+        modal.classList.add('show');
+    }
+
+    // Close prerequisite details modal
+    closePrerequisiteModal() {
+        document.getElementById('prerequisiteModal').classList.remove('show');
     }
 
     // Add missing course to catalog (for technical electives not in predefined list)
@@ -2630,7 +2737,6 @@ class GradPathApp {
                         category: "elective",
                         description: `Technical elective course - ${course.code}`
                     };
-                    console.log(`Added missing technical elective to catalog: ${courseId}`);
                 }
             }
         }
@@ -2684,7 +2790,6 @@ class GradPathApp {
         
         // Update the list with all technical electives taken
         this.userProgress.technicalElectivesTaken = Array.from(technicalElectivesTaken);
-        console.log('Technical electives taken:', this.userProgress.technicalElectivesTaken);
     }
 
     // Update general education courses - replace placeholders with actual courses taken
@@ -2745,13 +2850,11 @@ class GradPathApp {
             }
         });
 
-        console.log('Gen Ed mappings:', this.userProgress.genEdMappings);
     }
 
     // Helper method to process a single gen ed mapping
     processGenEdMapping(category, placeholderId, actualCourseId, actualSemesterId, courseInfo) {
         if (!placeholderId || !actualCourseId) return;
-                    console.log(`Processing gen ed mapping: ${category} -> ${placeholderId} -> ${actualCourseId}`);
                     
                     // Add the actual course to catalog if not already there
                     if (!courseCatalog[actualCourseId]) {
@@ -2781,24 +2884,20 @@ class GradPathApp {
                                 category: "general",
                                 description: `${category} requirement - ${courseName}`
                             };
-                            console.log(`Added gen ed course to catalog: ${actualCourseId} (${category}) - ${courseName}`);
                         } else {
                             console.warn(`Could not find course info for ${actualCourseId} (${category})`);
                         }
                     } else {
-                        console.log(`Gen ed course ${actualCourseId} already in catalog`);
                     }
 
                     // Store the mapping
                     this.userProgress.genEdMappings[placeholderId] = actualCourseId;
-                    console.log(`Mapped ${category}: ${placeholderId} -> ${actualCourseId}`);
 
                     // Always remove placeholder instances from semesters since the actual course is already there
                     // The actual course should already be in the correct semester from the regular parsing
                     this.userProgress.semesters.forEach(semester => {
                         const placeholderIndex = semester.courses.indexOf(placeholderId);
                         if (placeholderIndex !== -1) {
-                            console.log(`Removing placeholder ${placeholderId} from ${semester.id} (replaced with ${actualCourseId})`);
                             semester.courses.splice(placeholderIndex, 1);
                             const placeholderCredits = courseCatalog[placeholderId]?.credits || 3;
                             semester.credits = Math.max(0, semester.credits - placeholderCredits);
@@ -2815,7 +2914,6 @@ class GradPathApp {
                             if (courseCatalog[actualCourseId]) {
                                 targetSemester.credits += courseCatalog[actualCourseId].credits;
                             }
-                            console.log(`Added ${actualCourseId} to ${actualSemesterId}`);
                         }
                     }
     }
@@ -2838,7 +2936,6 @@ class GradPathApp {
                 this.userProgress.semesters.forEach(semester => {
                     const placeholderIndex = semester.courses.indexOf(placeholder);
                     if (placeholderIndex !== -1) {
-                        console.log(`Removing unused free elective placeholder ${placeholder} from ${semester.id}`);
                         semester.courses.splice(placeholderIndex, 1);
                         const placeholderCredits = courseCatalog[placeholder]?.credits || 3;
                         semester.credits = Math.max(0, semester.credits - placeholderCredits);
@@ -2847,21 +2944,276 @@ class GradPathApp {
             }
         });
         
-        console.log(`Free elective cleanup: ${usedPlaceholders.length} placeholders in use, ${freeElectivePlaceholders.length - usedPlaceholders.length} removed`);
     }
 
     // Clean up math elective placeholders if requirement is already met
     cleanupMathElectivePlaceholders() {
         const mathElectiveCourseCount = this.getMathElectiveCourseCount();
         
-        console.log(`Math elective cleanup: ${mathElectiveCourseCount} courses scheduled (requirement: 3)`);
         
         // If 3 or more math elective courses are already scheduled, ensure math electives are hidden
         // The shouldHideCourse function should handle this, but we'll log it for debugging
         if (mathElectiveCourseCount >= 3) {
-            console.log(`Math elective requirement met (${mathElectiveCourseCount} courses). Math electives should be hidden from available courses.`);
         } else {
-            console.log(`Math elective requirement not yet met (${mathElectiveCourseCount}/3 courses). Math electives should be visible.`);
+        }
+    }
+
+    // Add a new semester to the roadmap
+    addSemester() {
+        if (this.userProgress.semesters.length === 0) {
+            // If no semesters exist, create a default one
+            const defaultSemester = {
+                id: 'Fall2025',
+                term: 'Fall',
+                year: 2025,
+                courses: [],
+                credits: 0,
+                status: 'planned'
+            };
+            this.userProgress.semesters.push(defaultSemester);
+            this.saveUserProgress();
+            this.renderRoadmap();
+            this.showFeedback('success', `Added ${defaultSemester.term} ${defaultSemester.year}`, 2000);
+            return;
+        }
+
+        // Find the last semester that's actually displayed in the roadmap
+        // Get all semester cards from the DOM to see what's actually visible
+        const roadmapContainer = document.getElementById('roadmap');
+        const semesterCards = roadmapContainer ? Array.from(roadmapContainer.querySelectorAll('.semester-card')) : [];
+        
+        let lastSemester = null;
+        
+        if (semesterCards.length > 0) {
+            // Extract semester info from the DOM cards
+            const displayedSemesters = semesterCards.map(card => {
+                const semesterId = card.dataset.semesterId;
+                const semester = this.userProgress.semesters.find(s => s.id === semesterId);
+                return semester;
+            }).filter(s => s !== undefined);
+            
+            // Sort by academic sequence order to find the last one in the proper sequence
+            // Academic sequence: Fall 2028 -> Spring 2029 -> Fall 2029 -> Spring 2030
+            // We need to find the last semester that's in a continuous sequence
+            const sortedDisplayed = displayedSemesters.sort((a, b) => {
+                // Convert to a comparable value: year * 10 + termOrder
+                // This ensures Fall 2028 (20280) < Spring 2029 (20291) < Fall 2029 (20290) < Spring 2030 (20301)
+                const termOrder = { 'Fall': 0, 'Winter': 1, 'Spring': 1, 'Summer': 2 };
+                // For Spring, we need to treat it as part of the next academic year for comparison
+                // Fall 2028 = 2028*10 + 0 = 20280
+                // Spring 2029 = 2029*10 + 1 = 20291 (Spring is in next calendar year)
+                // Fall 2029 = 2029*10 + 0 = 20290
+                // Spring 2030 = 2030*10 + 1 = 20301
+                
+                const aValue = a.year * 10 + (termOrder[a.term] || 0);
+                const bValue = b.year * 10 + (termOrder[b.term] || 0);
+                return aValue - bValue;
+            });
+            
+            
+            // Find the last semester in a continuous sequence
+            // Start from the end and work backwards to find the last one that makes sense
+            // If we have Spring 2028 and Spring 2029, Spring 2028 should be considered "last in sequence"
+            // because Spring 2029 has a gap before it (Fall 2028 is missing)
+            lastSemester = sortedDisplayed[sortedDisplayed.length - 1];
+            
+            // Check if there's a gap before the last semester
+            // If the last is Spring 2029, check if Fall 2028 exists (the Fall that should come before Spring 2029)
+            // If Fall 2028 doesn't exist, use Spring 2028 as the last instead
+            if (lastSemester && lastSemester.term === 'Spring') {
+                // Spring 2029 should have Fall 2028 before it (Fall of previous calendar year)
+                const fallBeforeSpring = displayedSemesters.find(s => 
+                    s.term === 'Fall' && s.year === lastSemester.year - 1
+                );
+                if (!fallBeforeSpring) {
+                    // Fall before Spring is missing, so use the previous semester in the list
+                    // This means there's a gap, so we should add the missing Fall
+                    const prevSemester = sortedDisplayed[sortedDisplayed.length - 2];
+                    if (prevSemester) {
+                        // Use the previous one as the "last in sequence"
+                        // If prev is Spring 2028 and current is Spring 2029, use Spring 2028
+                        lastSemester = prevSemester;
+                    }
+                }
+            }
+            
+        }
+        
+        // Fallback: if we couldn't find from DOM, use the data structure
+        if (!lastSemester) {
+            const sortedSemesters = [...this.userProgress.semesters].sort((a, b) => {
+                const termOrder = { 'Fall': 0, 'Winter': 1, 'Spring': 2, 'Summer': 3 };
+                if (a.year !== b.year) {
+                    return a.year - b.year;
+                }
+                const aTermOrd = termOrder[a.term] !== undefined ? termOrder[a.term] : 999;
+                const bTermOrd = termOrder[b.term] !== undefined ? termOrder[b.term] : 999;
+                return aTermOrd - bTermOrd;
+            });
+            lastSemester = sortedSemesters[sortedSemesters.length - 1];
+        }
+        
+        if (!lastSemester) {
+            this.showFeedback('error', 'Could not determine last semester', 2000);
+            return;
+        }
+        
+        
+        // Determine if Summer should be included based on the immediate pattern
+        // Key rule: Fall -> Spring (always), never Fall -> Summer
+        // Summer is only included if:
+        // 1. Last semester is Spring AND there's a Summer in the same year, OR
+        // 2. Last semester is Summer (then next is Fall)
+        let hasSummer = false;
+        const lastTerm = lastSemester.term;
+        const lastYear = lastSemester.year;
+        
+        if (lastTerm === 'Spring') {
+            // If last is Spring, check if there's a Summer in the same year
+            // This means the pattern is: Spring -> Summer (same year)
+            // Check both displayed semesters and all semesters in the data
+            const allSemesters = this.userProgress.semesters;
+            const hasSummerInSameYear = allSemesters.some(s => 
+                s.id.startsWith('Summer') && s.year === lastYear
+            );
+            hasSummer = hasSummerInSameYear;
+        } else if (lastTerm === 'Summer') {
+            // If last is Summer, we're in a Summer pattern
+            hasSummer = true;
+        } else if (lastTerm === 'Fall') {
+            // If last is Fall, NEVER add Summer next - always go to Spring
+            // Even if Summer exists elsewhere, Fall -> Spring is the standard sequence
+            hasSummer = false;
+        }
+        
+        // Determine term sequence based on whether summer is included
+        // Standard academic year sequence: Fall -> Spring (no summer) or Fall -> Spring -> Summer (with summer)
+        // But when moving to next year, we go: Fall -> Spring -> (Summer if included) -> Fall (next year)
+        const terms = hasSummer ? ["Fall", "Spring", "Summer"] : ["Fall", "Spring"];
+        const termOrderMap = { "Fall": 0, "Spring": 1, "Summer": 2 };
+
+        // Calculate next semester - try up to 5 semesters ahead to find one that doesn't exist
+        let attempts = 0;
+        let nextYear = lastSemester.year;
+        let currentTermIndex = termOrderMap[lastSemester.term] !== undefined ? termOrderMap[lastSemester.term] : 0;
+        
+        while (attempts < 5) {
+            // Move to next term in sequence
+            // If current is Fall (0), next is Spring (1) - NEXT YEAR
+            // If current is Spring (1), next is Summer (2) if included (same year), otherwise Fall (same year)
+            // If current is Summer (2), next is Fall (same year)
+            
+            
+            if (currentTermIndex === 0) {
+                // Fall -> Spring (next calendar year, but same academic year)
+                // Fall 2025 -> Spring 2026
+                currentTermIndex = 1;
+                nextYear++;
+            } else if (currentTermIndex === 1) {
+                // Spring -> Summer (if included, same year) or Fall (same year)
+                // Spring 2028 -> Summer 2028 (if summer) or Fall 2028
+                if (hasSummer) {
+                    currentTermIndex = 2;
+                    // Year stays the same (Spring 2028 -> Summer 2028)
+                } else {
+                    // Spring -> Fall (same calendar year)
+                    // Spring 2028 -> Fall 2028
+                    currentTermIndex = 0;
+                    // Year stays the same - IMPORTANT: Spring and Fall are in the same calendar year
+                }
+            } else if (currentTermIndex === 2) {
+                // Summer -> Fall (same calendar year)
+                // Summer 2028 -> Fall 2028
+                currentTermIndex = 0;
+                // Year stays the same
+            } else {
+                // Fallback: should not reach here, but if we do, increment term
+                currentTermIndex = (currentTermIndex + 1) % terms.length;
+                // Only increment year if we're wrapping from the last term to the first
+                if (currentTermIndex === 0 && terms.length > 0) {
+                    // We're going from the last term back to Fall, so increment year
+                    // But this should only happen in specific cases
+                    nextYear++;
+                }
+            }
+
+            const nextTerm = terms[currentTermIndex];
+            const nextSemesterId = `${nextTerm}${nextYear}`;
+            
+
+            // Check if this semester already exists
+            const existingSemester = this.userProgress.semesters.find(s => s.id === nextSemesterId);
+            if (!existingSemester) {
+                // Found a semester that doesn't exist - create it
+                const newSemester = {
+                    id: nextSemesterId,
+                    term: nextTerm,
+                    year: nextYear,
+                    courses: [],
+                    credits: 0,
+                    status: 'planned'
+                };
+
+                this.userProgress.semesters.push(newSemester);
+                this.saveUserProgress();
+                this.renderRoadmap();
+                this.updateProgress();
+                this.showFeedback('success', `Added ${nextTerm} ${nextYear}`, 2000);
+                return;
+            } else {
+            }
+            
+            // Semester already exists, continue to next iteration
+            // The currentTermIndex and nextYear are already updated for the next iteration
+            attempts++;
+        }
+
+        // If we couldn't find a free slot, show a more helpful message
+        this.showFeedback('warning', `Could not add semester. The next 5 semesters already exist.`, 3000);
+    }
+
+    // Remove a semester from the roadmap
+    removeSemester(semesterId) {
+        const semester = this.userProgress.semesters.find(s => s.id === semesterId);
+        if (!semester) {
+            return;
+        }
+
+        // Warn if semester has courses
+        if (semester.courses.length > 0) {
+            const courseCount = semester.courses.length;
+            const confirmMessage = `This semester has ${courseCount} course(s). Are you sure you want to remove it? All courses will be removed.`;
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+        }
+
+        // Remove the semester
+        const index = this.userProgress.semesters.findIndex(s => s.id === semesterId);
+        if (index !== -1) {
+            const removedSemester = this.userProgress.semesters[index];
+            this.userProgress.semesters.splice(index, 1);
+
+            // If this was the current semester, set a new current semester
+            if (removedSemester.status === 'current' || removedSemester.status === 'in-progress') {
+                if (this.userProgress.semesters.length > 0) {
+                    // Set the first planned semester as current, or the last semester if no planned ones
+                    const plannedSemester = this.userProgress.semesters.find(s => s.status === 'planned');
+                    if (plannedSemester) {
+                        plannedSemester.status = 'current';
+                        this.userProgress.currentSemester = plannedSemester.id;
+                    } else if (this.userProgress.semesters.length > 0) {
+                        const lastSemester = this.userProgress.semesters[this.userProgress.semesters.length - 1];
+                        lastSemester.status = 'current';
+                        this.userProgress.currentSemester = lastSemester.id;
+                    }
+                }
+            }
+
+            this.saveUserProgress();
+            this.renderRoadmap();
+            this.updateProgress();
+            this.showFeedback('success', `Removed ${removedSemester.term} ${removedSemester.year}`, 2000);
         }
     }
 }
