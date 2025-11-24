@@ -300,6 +300,16 @@ body {
     gap: 10px;
     max-height: 600px;
     overflow-y: auto;
+    padding: 10px;
+    border-radius: 4px;
+    transition: all 0.3s;
+    min-height: 100px;
+}
+
+.courses-list.valid-drop-available {
+    background-color: #e8f5e9;
+    border: 2px dashed var(--color-success);
+    border-radius: 4px;
 }
 
 /* Course Card */
@@ -384,6 +394,19 @@ body {
     border-radius: 3px;
     font-size: 0.75em;
     font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.prerequisite-badge:hover {
+    background: #FFB300;
+    transform: scale(1.05);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.prerequisite-badge:active {
+    transform: scale(0.95);
 }
 
 /* Roadmap Section */
@@ -462,10 +485,55 @@ body {
 .semester-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     margin-bottom: 15px;
     padding-bottom: 10px;
     border-bottom: 2px solid var(--color-border);
+}
+
+/* Add/Remove Semester Buttons */
+.btn-add-semester {
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.btn-add-semester:hover {
+    background: #1976d2;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.btn-add-semester:active {
+    transform: translateY(0);
+}
+
+.btn-remove-semester {
+    background: transparent;
+    border: none;
+    font-size: 24px;
+    color: #666;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.btn-remove-semester:hover {
+    background: #ffebee;
+    color: #c62828;
 }
 
 .semester-title {
