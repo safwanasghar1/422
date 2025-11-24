@@ -674,8 +674,21 @@ function generateSemesters(startYear = 2025, startTerm = "Fall", includeSummer =
             status: i === 0 ? "current" : "planned"
         });
         
-        termIndex = (termIndex + 1) % terms.length;
-        if (termIndex === 0) {
+        // Move to next term and handle year increment
+        // Academic year sequence: Fall 2025 -> Spring 2026 -> Fall 2026 -> Spring 2027
+        const currentTerm = terms[termIndex];
+        
+        // Increment term index for next iteration
+        termIndex++;
+        
+        // Handle year increment based on term sequence
+        if (termIndex >= terms.length) {
+            // Wrapped around to the beginning of terms array (Spring -> Fall)
+            termIndex = 0;
+            // Year stays the same when going from Spring to Fall (Spring 2026 -> Fall 2026)
+        } else if (currentTerm === "Fall" && terms[termIndex] === "Spring") {
+            // Fall -> Spring: Spring is in the next calendar year
+            // Fall 2025 -> Spring 2026
             currentYear++;
         }
     }
