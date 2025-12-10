@@ -1,5 +1,5 @@
 // GradPath Application Logic
-
+//
 class GradPathApp {
     constructor() {
         this.userProgress = this.loadUserProgress();
