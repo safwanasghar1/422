@@ -3224,7 +3224,3 @@ document.addEventListener('DOMContentLoaded', () => {
     app = new GradPathApp();
 });
 
-
-class whatever {
-    
-}
